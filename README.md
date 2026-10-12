@@ -1,4 +1,4 @@
-# LUBB AI — لُبّ
+# LUBB AI — 
 
 Smart meeting system — نظام الاجتماعات الذكي
 
