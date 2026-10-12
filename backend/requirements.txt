@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+httpx>=0.27          # Ollama client + FastAPI TestClient
+pytest>=8
+
+# Local AI (install on the hub/GPU machine):
+# faster-whisper>=1.1  # speech-to-text
+# numpy
