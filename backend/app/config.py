@@ -5,18 +5,29 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Settings:
     default_language: str = os.getenv("DEFAULT_LANGUAGE", "ar")
-    # Speech-to-text (faster-whisper). "stub" = no model, returns placeholder text.
+    # Speech-to-text. "stub" = placeholder text, "whisper" = faster-whisper on this machine,
+    # "remote" = POST audio to STT_URL (e.g. the Colab server in colab/).
     stt_engine: str = os.getenv("STT_ENGINE", "stub")
     whisper_model: str = os.getenv("WHISPER_MODEL", "large-v3-turbo")
-    # Local LLM served by Ollama. "stub" = no model, returns placeholder report.
+    stt_url: str = os.getenv("STT_URL", "").rstrip("/")
+    # LLM served by Ollama, locally or remotely (OLLAMA_URL can be the Colab tunnel URL).
+    # "stub" = no model, returns placeholder report.
     llm_engine: str = os.getenv("LLM_ENGINE", "stub")
-    ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
     llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:14b")
-    cors_origins: tuple[str, ...] = ("http://localhost:5173",)
+    # Shared secret sent as "Authorization: Bearer <token>" to remote AI servers.
+    ai_token: str = os.getenv("AI_TOKEN", "")
+    db_path: str = os.getenv("DB_PATH", "data/lubb.db")  # relative to where the hub is started
+    cors_origins: tuple[str, ...] = ("http://localhost:3000",)
 
     # Audio format agreed in docs/device-protocol.md
     sample_rate: int = 16_000
     sample_width: int = 2  # bytes (16-bit PCM)
+
+
+    @property
+    def ai_headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.ai_token}"} if self.ai_token else {}
 
 
 settings = Settings()

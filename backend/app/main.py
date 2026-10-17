@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .routers import devices, meetings
 
-app = FastAPI(title="LUBB AI Hub", version="0.1.0")
+app = FastAPI(title="LUBB AI Hub", version="1.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,4 +19,4 @@ app.include_router(devices.router)
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "stt": settings.stt_engine, "llm": settings.llm_engine}
+    return {"status": "ok", "version": app.version, "stt": settings.stt_engine, "llm": settings.llm_engine}

@@ -75,6 +75,7 @@ class Meeting(BaseModel):
     participants: list[Participant] = []
     utterances: list[Utterance] = []
     report: Report | None = None
+    report_pending: bool = False  # minutes are being generated
     started_at: datetime | None = None
     ended_at: datetime | None = None
 

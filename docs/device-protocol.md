@@ -40,6 +40,14 @@ protocol, so software can be built and tested before real buttons exist.
 { "type": "floor_denied", "reason": "busy" }
 ```
 
+## Connection behaviour (hub v1.2)
+
+- On connect, the hub immediately sends the current LED state: `ready` during a live meeting,
+  `muted` when no meeting is live or someone holds the floor in `one_at_a_time` mode.
+- If a button reconnects with the same `device_id`, the hub closes the old connection and keeps the new one.
+  Buttons should reconnect automatically (the simulator retries every 2 s).
+- If a button disconnects while talking, the audio received so far is still transcribed, and the floor is released.
+
 **Rule:** the button never decides on its own whether it may talk. It sends
 `button_down` and waits for `led: talking` before streaming audio. All floor
 control logic (free mode, one-at-a-time, queue, chairman) lives in the hub, so
