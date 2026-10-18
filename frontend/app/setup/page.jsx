@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Star, X } from "lucide-react";
+import { Camera, Plus, Star, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { Avatar, Button, Card, CardHeader, Field, Notice, PageHeader, Segmented, inputClass } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { BUTTONS, SPEAKER_COLORS } from "@/lib/format";
+import { toAvatarDataUrl } from "@/lib/image";
 import { useHub } from "@/lib/useHub";
 
 const MAX_PARTICIPANTS = BUTTONS.length;
@@ -19,6 +20,7 @@ const newParticipant = (used, n) => ({
   device_id: BUTTONS.find((b) => !used.has(b)) ?? null,
   color: SPEAKER_COLORS[n % SPEAKER_COLORS.length],
   is_chair: n === 0,
+  photo: null,
 });
 
 export default function SetupPage() {
@@ -200,7 +202,7 @@ export default function SetupPage() {
               </span>
             }
           />
-          <div className="hidden grid-cols-[2rem_1fr_1fr_7.5rem_2rem_1.5rem] gap-3 px-5 pt-4 text-xs text-muted sm:grid">
+          <div className="hidden grid-cols-[2.25rem_1fr_1fr_7.5rem_2rem_1.5rem] gap-3 px-5 pt-4 text-xs text-muted sm:grid">
             <span />
             <span>{t("setup.name")}</span>
             <span>{t("setup.role")}</span>
@@ -210,8 +212,8 @@ export default function SetupPage() {
           </div>
           <ul className="divide-y divide-line px-5 sm:divide-y-0">
             {participants.map((p) => (
-              <li key={p.key} className="grid grid-cols-[2rem_1fr_1.5rem] items-center gap-3 py-3 sm:grid-cols-[2rem_1fr_1fr_7.5rem_2rem_1.5rem] sm:py-2">
-                <Avatar name={p.name || "?"} color={p.color} size="sm" />
+              <li key={p.key} className="grid grid-cols-[2.25rem_1fr_1.5rem] items-center gap-3 py-3 sm:grid-cols-[2.25rem_1fr_1fr_7.5rem_2rem_1.5rem] sm:py-2">
+                <PhotoPicker participant={p} onChange={(photo) => update(p.key, { photo })} />
                 <input className={inputClass} value={p.name} placeholder={t("setup.name")} onChange={(e) => update(p.key, { name: e.target.value })} />
                 <input
                   className={`${inputClass} col-start-2 sm:col-start-auto`}
@@ -268,6 +270,59 @@ export default function SetupPage() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/** Avatar that doubles as an upload button. Photos are shrunk in the browser before they're sent to the hub. */
+function PhotoPicker({ participant: p, onChange }) {
+  const { t } = useTranslation();
+
+  const pick = async (file) => {
+    if (!file?.type.startsWith("image/")) return;
+    try {
+      onChange(await toAvatarDataUrl(file));
+    } catch {
+      /* unreadable image — keep the old one */
+    }
+  };
+
+  return (
+    <div className="group relative size-9">
+      <label
+        title={t("setup.photo")}
+        className="block size-9 cursor-pointer rounded-full"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          pick(e.dataTransfer.files[0]);
+        }}
+      >
+        <Avatar name={p.name || "?"} color={p.color} photo={p.photo} />
+        <span className="absolute inset-0 grid place-items-center rounded-full bg-black/50 text-white opacity-0 transition group-hover:opacity-100">
+          <Camera size={15} />
+        </span>
+        <input
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={(e) => {
+            pick(e.target.files?.[0]);
+            e.target.value = ""; // allow picking the same file again
+          }}
+        />
+      </label>
+      {p.photo && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          title={t("setup.removePhoto")}
+          aria-label={t("setup.removePhoto")}
+          className="absolute -end-1 -top-1 hidden size-4 place-items-center rounded-full border border-line bg-card text-muted hover:text-danger group-hover:grid"
+        >
+          <X size={10} strokeWidth={3} />
+        </button>
+      )}
     </div>
   );
 }

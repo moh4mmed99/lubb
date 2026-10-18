@@ -39,18 +39,18 @@ export function Badge({ tone = "muted", pulse = false, children }) {
   );
 }
 
-export function Avatar({ name, color, size = "md", ring = false, dim = false }) {
+export function Avatar({ name, color, photo, size = "md", ring = false, dim = false }) {
   const dims = size === "sm" ? "size-7 text-xs" : "size-9 text-sm";
   return (
     <span
-      className={`grid shrink-0 place-items-center rounded-full font-semibold transition ${dims} ${dim ? "opacity-40" : ""}`}
+      className={`grid shrink-0 place-items-center overflow-hidden rounded-full font-semibold transition ${dims} ${dim ? "opacity-40" : ""}`}
       style={{
         backgroundColor: `${color}1f`,
         color,
         boxShadow: ring ? `0 0 0 2px var(--card), 0 0 0 4px ${color}` : undefined,
       }}
     >
-      {name.slice(0, 1)}
+      {photo ? <img src={photo} alt={name} className="size-full object-cover" /> : name.slice(0, 1)}
     </span>
   );
 }

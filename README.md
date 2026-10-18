@@ -13,7 +13,7 @@ English is fully supported.
                                  └──── live events (WebSocket) ◄─────┘
                                  │                                   └─► LLM (Ollama) ─► minutes
                                  ▼
-                       Web app (Next.js) — dashboard, setup, archive, minutes, button simulator
+                       Web app (Next.js) — dashboard, KPIs, setup, archive, minutes
 ```
 
 Contents: [What's new in v1.2](#whats-new-in-v12) · [Getting started on Ubuntu](#getting-started-on-ubuntu) ·
@@ -36,7 +36,6 @@ Contents: [What's new in v1.2](#whats-new-in-v12) · [Getting started on Ubuntu]
 - **New meeting:** starts empty. It shows which buttons are connected right now, checks the form (title, at least one participant, no button used twice) and warns if another meeting is already live.
 - **Archive:** lists real meetings with their status (live / writing minutes / draft / approved) and searches titles, names and transcripts.
 - **Minutes page (`/meetings/<id>`):** waits while the AI writes and updates by itself when the minutes are ready. You can edit the summary, decisions and tasks (owner, due date), tick tasks done, approve, export a PDF, generate again, and delete the meeting.
-- **Button simulator:** opens the microphone once when the page loads (asking for permission mid-press used to cancel the press). It also resamples to 16 kHz in every browser (Firefox used to fail), reconnects by itself and remembers which button it is.
 
 **Backend**
 - **SQLite storage** (`backend/data/lubb.db`) instead of memory: meetings survive restarts, and a meeting that was live when the hub stopped is still live after it restarts.
@@ -117,15 +116,11 @@ Open **http://localhost:3000**.
 ### 5. Try a meeting
 
 1. **New meeting:** enter a title, add a participant on **btn-1**, then click **Start meeting**.
-2. Open **http://localhost:3000/simulator** in another tab, pick **btn-1** and allow the microphone.
-3. Hold the button (it turns green), talk, and release.
-4. The dashboard (`/`) shows `[2.8s audio — transcription stub]`. That's expected: the AI is off by default. See [Running the AI](#running-the-ai).
-5. Click **End meeting**. The minutes page opens and fills in by itself.
-
-**Phones as buttons.** Phones on the same Wi-Fi can open `http://<laptop-ip>:3000/simulator`.
-Allow the port with `sudo ufw allow 3000` if the firewall is on. Phone browsers only allow the
-microphone over HTTPS, so start the web app with `npm run dev -- --experimental-https` and open the
-`https://` address, accepting the self-signed certificate warning.
+2. On the real button **btn-1**, hold to talk (it turns green), then release. The hub needs
+   `MICS_ENABLED=true` in `backend/.env`; while it's `false`, every button stays muted.
+3. The dashboard (`/`) shows what was said. With `STT_ENGINE=stub` it shows `[2.8s audio — transcription stub]`
+   instead of words; see [Running the AI](#running-the-ai).
+4. Click **End meeting**. The minutes page opens and fills in by itself.
 
 ---
 
@@ -143,10 +138,10 @@ Same as Ubuntu, with these differences:
 
 | Piece | Where | What it does |
 |---|---|---|
-| **Buttons** | hardware, or `/simulator` in a browser | Send `button_down` / `button_up` and, while allowed to talk, 16 kHz PCM audio. Show an LED colour from the hub. |
+| **Buttons** | hardware | Send `button_down` / `button_up` and, while allowed to talk, 16 kHz PCM audio. Show an LED colour from the hub. |
 | **Hub** | `backend/` (Python, FastAPI) | Floor control, recording each turn, speech-to-text, storage, minutes, live events. |
 | **AI** | stub, local GPU, or Google Colab | Whisper turns audio into text; an LLM served by Ollama writes the minutes. |
-| **Web app** | `frontend/` (Next.js) | Dashboard, setup, archive, minutes, simulator. Talks to the hub through the Next.js proxy. |
+| **Web app** | `frontend/` (Next.js) | Dashboard, KPIs, setup, archive, minutes. Talks to the hub through the Next.js proxy. |
 
 ### A meeting, step by step
 
@@ -163,7 +158,7 @@ Same as Ubuntu, with these differences:
 
 The button never decides on its own whether it may talk; all rules live in the hub. The full
 button contract is in [docs/device-protocol.md](docs/device-protocol.md); read it before touching
-firmware or the simulator.
+the firmware.
 
 ### Speaking modes
 
@@ -308,7 +303,6 @@ frontend/                    Next.js 16 (App Router) + React 19 + Tailwind 4, pl
   app/setup/page.jsx         New meeting
   app/meetings/page.jsx      Archive + search
   app/meetings/[id]/page.jsx Minutes: view, edit, approve, export, generate again, delete
-  app/simulator/page.jsx     Browser stand-in for a hardware button
   components/                AppShell (navigation), ui (Card, Button, Badge…), StatusBadge, Logo
   lib/api.js                 REST client + error messages
   lib/useHub.js              Live events WebSocket hook (auto-reconnect)
@@ -328,7 +322,7 @@ frontend/                    Next.js 16 (App Router) + React 19 + Tailwind 4, pl
 - **Right-to-left:** use logical Tailwind classes (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`), not `ml-`/`mr-`/`left-`/`right-`. Wrap user text in `<bdi>` or `dir="auto"`, because meetings mix Arabic and English.
 - **Pages are client components** (`"use client"`) that fetch from `/api` and listen to `useHub()`. Follow the same pattern: load on connect, update from events.
 - **Changing the data model:** edit `backend/app/models.py` and give new fields a default, so existing meetings in SQLite still load.
-- **Changing the button protocol:** update `docs/device-protocol.md`, `routers/devices.py` and `app/simulator/page.jsx` together.
+- **Changing the button protocol:** update `docs/device-protocol.md` and `routers/devices.py` together, and tell the hardware team.
 - **`frontend/AGENTS.md`** is written automatically by `next dev` for AI coding tools. Leave it.
 - **Never commit** `backend/.env` (tokens), `backend/data/` (meeting recordings and text), `.venv/` or `node_modules/`. They are already git-ignored.
 
@@ -336,7 +330,7 @@ frontend/                    Next.js 16 (App Router) + React 19 + Tailwind 4, pl
 
 ## Roadmap
 
-- [x] Device protocol, floor control, live dashboard, button simulator
+- [x] Device protocol, floor control, live dashboard
 - [x] Meeting setup (participants, button assignment, agenda, language)
 - [x] Minutes: review, edit, approve, export PDF
 - [x] Database (SQLite), meeting archive & search, speaking-time stats

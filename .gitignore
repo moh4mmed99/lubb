@@ -10,3 +10,4 @@ data/
 .next/
 next-env.d.ts
 .vscode/
+venv/

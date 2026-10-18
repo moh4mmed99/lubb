@@ -1,13 +1,14 @@
 "use client";
 
-import { Archive, ListChecks, Mic, PlusCircle, Square } from "lucide-react";
+import { Archive, Check, ChevronLeft, ChevronRight, ListChecks, Mic, PlusCircle, Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Avatar, Badge, Button, Card, CardHeader, EmptyState, Loading, Notice, VoiceBars } from "@/components/ui";
+import { MeetingStats } from "@/components/MeetingStats";
+import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, Segmented, VoiceBars } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
-import { addUtterance, elapsed, formatDate, mmss, speakingTime } from "@/lib/format";
+import { addUtterance, elapsed, formatDate } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
 
 export default function LiveMeetingPage() {
@@ -46,6 +47,9 @@ export default function LiveMeetingPage() {
       case "battery":
         setDevices((d) => (d[e.device_id] ? { ...d, [e.device_id]: { ...d[e.device_id], battery: e.level } } : d));
         break;
+      case "agenda":
+        setMeeting((m) => (m && m.id === e.meeting_id ? { ...m, agenda_index: e.index } : m));
+        break;
       case "meeting_started":
       case "meeting_ended":
         load();
@@ -70,6 +74,18 @@ export default function LiveMeetingPage() {
     } catch (err) {
       setError(errorText(err, t));
       setEnding(false);
+    }
+  };
+
+  const moveAgenda = async (index) => {
+    const next = Math.max(0, Math.min(index, meeting.agenda.length));
+    const previous = meeting.agenda_index;
+    setMeeting((m) => ({ ...m, agenda_index: next })); // optimistic; the hub broadcasts the same change
+    try {
+      await api(`/meetings/${meeting.id}/agenda`, { method: "POST", body: { index: next } });
+    } catch (err) {
+      setMeeting((m) => ({ ...m, agenda_index: previous }));
+      setError(errorText(err, t));
     }
   };
 
@@ -133,6 +149,12 @@ export default function LiveMeetingPage() {
             <span>{t(`setup.floor.${meeting.floor_mode}`)}</span>
             <Badge tone={connected ? "ok" : "danger"}>{connected ? t("common.connected") : t("common.disconnected")}</Badge>
           </div>
+          {meeting.agenda_index < meeting.agenda.length && (
+            <p className="mt-2 text-sm">
+              <span className="text-muted">{t("live.item", { n: meeting.agenda_index + 1, total: meeting.agenda.length })} · </span>
+              <bdi className="font-medium">{meeting.agenda[meeting.agenda_index]}</bdi>
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-2 text-sm text-muted">
@@ -162,7 +184,7 @@ export default function LiveMeetingPage() {
               style={talking ? { borderColor: p.color } : undefined}
               title={p.device_id ? `${p.device_id}${battery != null ? ` · ${battery}%` : ""}` : undefined}
             >
-              <Avatar name={p.name} color={p.color} size="sm" ring={talking} dim={state === "offline"} />
+              <Avatar name={p.name} color={p.color} photo={p.photo} size="sm" ring={talking} dim={state === "offline"} />
               <div className="leading-tight">
                 <div className="text-sm font-medium">{p.name}</div>
                 <div className={`text-[11px] ${state === "waiting" ? "text-warn" : state === "offline" ? "text-danger" : "text-muted"}`}>
@@ -178,7 +200,7 @@ export default function LiveMeetingPage() {
       {/* Transcript + side panel */}
       <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <Transcript meeting={meeting} speaking={speaking} />
-        <SidePanel meeting={meeting} />
+        <SidePanel meeting={meeting} onMoveAgenda={moveAgenda} />
       </div>
     </div>
   );
@@ -218,7 +240,7 @@ function Transcript({ meeting, speaking }) {
           const p = byId[u.participant_id];
           return (
             <div key={u.id} className="flex gap-3">
-              <Avatar name={p?.name ?? "?"} color={p?.color ?? "#71717a"} size="sm" />
+              <Avatar name={p?.name ?? "?"} color={p?.color ?? "#71717a"} photo={p?.photo} size="sm" />
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
                   <span className="text-sm font-medium" style={{ color: p?.color }}>
@@ -247,50 +269,104 @@ function Transcript({ meeting, speaking }) {
   );
 }
 
-function SidePanel({ meeting }) {
+function SidePanel({ meeting, onMoveAgenda }) {
   const { t } = useTranslation();
-  const talk = speakingTime(meeting);
-  const maxTalk = Math.max(...Object.values(talk), 1);
+  const [tab, setTab] = useState("agenda");
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card>
-        <CardHeader title={t("setup.agenda")} />
-        {meeting.agenda.length ? (
-          <ol className="space-y-2 p-5 text-sm">
-            {meeting.agenda.map((item, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="font-mono text-xs text-muted">{String(i + 1).padStart(2, "0")}</span>
-                <bdi>{item}</bdi>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="p-5 text-sm text-muted">{t("live.noAgenda")}</p>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader title={t("report.speakingTime")} />
-        <ul className="space-y-3 p-5">
-          {meeting.participants.map((p) => (
-            <li key={p.id} className="flex items-center gap-3 text-sm">
-              <span className="w-20 shrink-0 truncate">{p.name}</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
-                <div className="h-full rounded-full transition-all" style={{ width: `${((talk[p.id] ?? 0) / maxTalk) * 100}%`, backgroundColor: p.color }} />
-              </div>
-              <span className="w-10 text-end font-mono text-xs text-muted" dir="ltr">
-                {mmss(talk[p.id] ?? 0)}
-              </span>
-            </li>
-          ))}
-        </ul>
+    <div className="flex flex-col gap-3">
+      <Card className="flex flex-col">
+        <div className="border-b border-line p-3">
+          <Segmented
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "agenda", label: t("live.agenda") },
+              { value: "stats", label: t("live.stats") },
+            ]}
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 text-sm leading-relaxed">
+          {tab === "agenda" ? (
+            <AgendaList agenda={meeting.agenda} current={meeting.agenda_index} onSelect={onMoveAgenda} />
+          ) : (
+            <MeetingStats meeting={meeting} />
+          )}
+        </div>
+        {tab === "agenda" && <AgendaFooter total={meeting.agenda.length} current={meeting.agenda_index} onMove={onMoveAgenda} />}
       </Card>
 
       <p className="flex items-center gap-2 px-1 text-xs text-muted">
         <ListChecks size={14} />
         {t("live.aiNote")}
       </p>
+    </div>
+  );
+}
+
+/** Done items get a check, the current one is highlighted; click any item to jump to it. */
+function AgendaList({ agenda, current, onSelect }) {
+  const { t } = useTranslation();
+  if (!agenda.length) return <p className="text-muted">{t("live.noAgenda")}</p>;
+
+  return (
+    <ol className="space-y-1">
+      {agenda.map((item, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <li key={i}>
+            <button
+              onClick={() => onSelect(i)}
+              className={`flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-start transition hover:bg-subtle ${active ? "bg-subtle" : ""}`}
+            >
+              <span
+                className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-[10px] font-semibold ${
+                  done ? "border-fg bg-fg text-bg" : active ? "border-accent text-accent" : "border-line text-muted"
+                }`}
+              >
+                {done ? <Check size={12} strokeWidth={3} /> : i + 1}
+              </span>
+              <bdi className={`flex-1 ${done ? "text-muted" : active ? "font-medium" : ""}`}>{item}</bdi>
+              {active && (
+                <span className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-accent">
+                  <span className="size-1.5 animate-pulse rounded-full bg-accent" />
+                  {t("live.now")}
+                </span>
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function AgendaFooter({ total, current, onMove }) {
+  const { t, i18n } = useTranslation();
+  // Arrows point in reading direction
+  const [Back, Forward] = i18n.language === "ar" ? [ChevronRight, ChevronLeft] : [ChevronLeft, ChevronRight];
+  if (!total) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-line px-3 py-3">
+      <Button onClick={() => onMove(current - 1)} disabled={current === 0} aria-label={t("live.previous")} className="px-2.5">
+        <Back size={16} />
+      </Button>
+      {/* progress: one segment per item */}
+      <div className="flex flex-1 gap-1">
+        {Array.from({ length: total }, (_, i) => (
+          <span key={i} className={`h-1 flex-1 rounded-full ${i < current ? "bg-fg" : i === current ? "bg-accent" : "bg-line"}`} />
+        ))}
+      </div>
+      {current >= total ? (
+        <span className="px-2 text-xs text-ok">{t("live.allDone")}</span>
+      ) : (
+        <Button variant="primary" onClick={() => onMove(current + 1)}>
+          {t("live.next")}
+          <Forward size={16} />
+        </Button>
+      )}
     </div>
   );
 }

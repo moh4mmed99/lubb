@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ChevronLeft, ChevronRight, PlusCircle, Search, Users } from "lucide-react";
+import { Archive, ChevronLeft, ChevronRight, PlusCircle, Search, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -44,11 +44,51 @@ export default function ArchivePage() {
     if (connected) load();
   }, [connected, load]);
 
+  const [busy, setBusy] = useState(false);
+
+  const remove = async (meeting) => {
+    if (!confirm(t("history.deleteOne", { title: meeting.title }))) return;
+    setBusy(true);
+    try {
+      await api(`/meetings/${meeting.id}`, { method: "DELETE" });
+      setMeetings((ms) => ms.filter((m) => m.id !== meeting.id));
+    } catch (err) {
+      setError(errorText(err, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeAll = async () => {
+    const count = meetings.filter((m) => m.status !== "live").length;
+    if (!confirm(t("history.deleteAllConfirm", { count }))) return;
+    setBusy(true);
+    try {
+      await api("/meetings", { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(errorText(err, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const results = meetings?.filter((m) => matches(m, query)) ?? [];
+  const deletable = meetings?.some((m) => m.status !== "live");
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <PageHeader title={t("history.title")} subtitle={t("history.subtitle")} />
+      <PageHeader
+        title={t("history.title")}
+        subtitle={t("history.subtitle")}
+        actions={
+          // Always shown so it's easy to find; disabled while there's nothing (finished) to delete
+          <Button variant="danger" onClick={removeAll} disabled={busy || !deletable} title={deletable ? undefined : t("history.nothingToDelete")}>
+            <Trash2 size={15} />
+            {t("history.deleteAll")}
+          </Button>
+        }
+      />
       {error && <Notice tone="danger">{error}</Notice>}
 
       {meetings === null ? (
@@ -77,11 +117,8 @@ export default function ArchivePage() {
             ) : (
               <ul className="divide-y divide-line">
                 {results.map((m) => (
-                  <li key={m.id}>
-                    <Link
-                      href={m.status === "live" ? "/" : `/meetings/${m.id}`}
-                      className="flex items-center gap-4 px-5 py-4 transition hover:bg-subtle"
-                    >
+                  <li key={m.id} className="group flex items-center transition hover:bg-subtle">
+                    <Link href={m.status === "live" ? "/" : `/meetings/${m.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-4 ps-5">
                       <div className="w-12 shrink-0 text-center">
                         {m.started_at ? (
                           <>
@@ -107,6 +144,16 @@ export default function ArchivePage() {
                       <StatusBadge meeting={m} />
                       <Chevron size={16} className="text-muted" />
                     </Link>
+                    {/* the live meeting must be ended before it can be deleted */}
+                    <button
+                      onClick={() => remove(m)}
+                      disabled={busy || m.status === "live"}
+                      aria-label={t("history.delete")}
+                      title={t("history.delete")}
+                      className="mx-3 grid size-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-card hover:text-danger disabled:invisible sm:opacity-0 sm:group-hover:opacity-100"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </li>
                 ))}
               </ul>

@@ -1,8 +1,7 @@
 # Device ↔ Hub Protocol (v0.1 — draft)
 
 This is the contract between the **hardware team** (speaker buttons) and the
-**software team** (hub). The phone/browser simulator implements the exact same
-protocol, so software can be built and tested before real buttons exist.
+**software team** (hub).
 
 ## Transport
 
@@ -45,7 +44,8 @@ protocol, so software can be built and tested before real buttons exist.
 - On connect, the hub immediately sends the current LED state: `ready` during a live meeting,
   `muted` when no meeting is live or someone holds the floor in `one_at_a_time` mode.
 - If a button reconnects with the same `device_id`, the hub closes the old connection and keeps the new one.
-  Buttons should reconnect automatically (the simulator retries every 2 s).
+  The old connection is closed with code **4001**: a button that sees 4001 must *not* reconnect
+  (it was replaced). After any other drop, buttons should reconnect automatically (every 2 s is a good default).
 - If a button disconnects while talking, the audio received so far is still transcribed, and the floor is released.
 
 **Rule:** the button never decides on its own whether it may talk. It sends

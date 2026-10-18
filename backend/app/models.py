@@ -33,6 +33,7 @@ class Participant(BaseModel):
     device_id: str | None = None  # the button assigned to this person
     color: str = "#3b82f6"
     is_chair: bool = False
+    photo: str | None = None  # small square JPEG as a data URL (resized in the browser)
 
 
 class Utterance(BaseModel):
@@ -42,6 +43,7 @@ class Utterance(BaseModel):
     ended_at: datetime
     text: str
     language: Language | None = None
+    agenda_index: int | None = None  # agenda item being discussed when this was said
 
 
 class Decision(BaseModel):
@@ -69,6 +71,7 @@ class Meeting(BaseModel):
     id: str = Field(default_factory=new_id)
     title: str
     agenda: list[str] = []
+    agenda_index: int = 0  # current item; == len(agenda) once every item is done
     language: Language = Language.ar
     floor_mode: FloorMode = FloorMode.free
     status: MeetingStatus = MeetingStatus.scheduled
@@ -78,6 +81,10 @@ class Meeting(BaseModel):
     report_pending: bool = False  # minutes are being generated
     started_at: datetime | None = None
     ended_at: datetime | None = None
+
+
+class AgendaMove(BaseModel):
+    index: int
 
 
 class MeetingCreate(BaseModel):

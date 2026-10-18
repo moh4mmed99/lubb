@@ -5,6 +5,9 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Settings:
     default_language: str = os.getenv("DEFAULT_LANGUAGE", "ar")
+    # Master switch for all microphones. Off: buttons stay muted and their audio is dropped.
+    # Turn on once the real button mics are connected.
+    mics_enabled: bool = os.getenv("MICS_ENABLED", "true").lower() not in ("0", "false", "no", "off")
     # Speech-to-text. "stub" = placeholder text, "whisper" = faster-whisper on this machine,
     # "remote" = POST audio to STT_URL (e.g. the Colab server in colab/).
     stt_engine: str = os.getenv("STT_ENGINE", "stub")

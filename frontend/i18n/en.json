@@ -1,11 +1,13 @@
 {
-  "app": { "name": "LUBB AI" },
+  "app": {
+    "name": "LUBB AI"
+  },
   "nav": {
     "live": "Live meeting",
     "setup": "New meeting",
     "history": "Archive",
-    "simulator": "Button simulator",
-    "theme": "Theme"
+    "theme": "Theme",
+    "kpis": "KPIs"
   },
   "common": {
     "participants": "{{count}} participants",
@@ -36,7 +38,14 @@
     "aiNote": "The AI writes the summary, decisions and tasks when the meeting ends.",
     "sttError": "Transcription failed",
     "noneTitle": "No meeting in progress",
-    "noneText": "Start a new meeting, or open the minutes of a past one from the archive."
+    "noneText": "Start a new meeting, or open the minutes of a past one from the archive.",
+    "agenda": "Agenda",
+    "stats": "Stats",
+    "item": "Item {{n}} of {{total}}",
+    "now": "Now",
+    "next": "Next item",
+    "previous": "Previous item",
+    "allDone": "All items covered"
   },
   "setup": {
     "title": "New meeting",
@@ -69,7 +78,9 @@
     "start": "Start meeting",
     "starting": "Starting…",
     "alreadyLive": "“{{title}}” is still live. End it before starting a new meeting.",
-    "openLive": "Open live meeting"
+    "openLive": "Open live meeting",
+    "photo": "Add photo",
+    "removePhoto": "Remove photo"
   },
   "report": {
     "label": "Meeting minutes",
@@ -104,7 +115,11 @@
     "owner": "Owner",
     "due": "Due",
     "speakingTime": "Speaking time",
-    "transcript": "Full transcript"
+    "transcript": "Full transcript",
+    "agenda": "Agenda",
+    "covered": "Discussed",
+    "skipped": "Not discussed",
+    "contributions": "{{count}} contributions"
   },
   "history": {
     "title": "Archive",
@@ -114,15 +129,45 @@
     "noneTitle": "No meetings yet",
     "noneText": "Meetings you hold appear here with their minutes and full transcript.",
     "live": "Live",
-    "scheduled": "Not started"
+    "scheduled": "Not started",
+    "delete": "Delete",
+    "deleteOne": "Delete “{{title}}” and its minutes permanently?",
+    "deleteAll": "Delete history",
+    "deleteAllConfirm": "This permanently deletes {{count}} meetings and their minutes. A live meeting is kept. Continue?",
+    "nothingToDelete": "No finished meetings to delete"
   },
-  "simulator": {
-    "title": "Button simulator",
-    "subtitle": "Use this device as a speaker button. Press and hold to talk.",
-    "hold": "Press and hold to talk",
-    "mutedHint": "Muted: no meeting is live, or someone else has the floor.",
-    "offline": "Not connected to the hub",
-    "micError": "Microphone unavailable",
-    "needsHttps": "The microphone needs HTTPS on phones. Open this page over https:// or on localhost."
+  "stats": {
+    "empty": "Numbers appear after the first contribution.",
+    "talkTime": "Talk time",
+    "contributions": "Contributions",
+    "speakers": "Speakers",
+    "bySpeaker": "Talk time by participant",
+    "byAgenda": "Time by agenda item",
+    "times": "{{count}}×"
+  },
+  "kpi": {
+    "title": "KPIs",
+    "subtitle": "Calculated from the meetings saved on the hub",
+    "present": "Show on screen",
+    "noneTitle": "No data yet",
+    "noneText": "KPIs appear after your first meeting.",
+    "vsLast": "vs last month",
+    "thisMonth": "This month",
+    "allTime": "All finished meetings",
+    "hoursUnit": "h",
+    "meetings": "Meetings this month",
+    "hours": "Meeting hours",
+    "taskCompletion": "Task completion",
+    "agendaCoverage": "Agenda coverage",
+    "perMonth": "Meetings per month",
+    "meetingsUnit": "meetings",
+    "tasks": "Task status",
+    "taskTotal": "{{count}} tasks",
+    "noTasks": "No tasks in the minutes yet.",
+    "status": {
+      "done": "Done",
+      "open": "Open",
+      "overdue": "Overdue"
+    }
   }
 }

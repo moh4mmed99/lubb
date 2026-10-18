@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Languages, LayoutGrid, Moon, PlusCircle, Smartphone, Sun } from "lucide-react";
+import { Archive, BarChart3, Languages, LayoutGrid, Moon, PlusCircle, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
@@ -9,9 +9,9 @@ import { Logo } from "./Logo";
 
 const nav = [
   { href: "/", key: "live", icon: LayoutGrid },
+  { href: "/kpis", key: "kpis", icon: BarChart3 },
   { href: "/setup", key: "setup", icon: PlusCircle },
   { href: "/meetings", key: "history", icon: Archive },
-  { href: "/simulator", key: "simulator", icon: Smartphone },
 ];
 
 export function AppShell({ children }) {

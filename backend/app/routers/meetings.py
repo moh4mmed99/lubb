@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from .. import state
 from ..floor_control import FloorController
-from ..models import Language, Meeting, MeetingCreate, MeetingStatus, Report
+from ..models import AgendaMove, Language, Meeting, MeetingCreate, MeetingStatus, Report
 from ..realtime import manager
 from ..services import llm
 from ..store import store
@@ -36,6 +36,15 @@ def create_meeting(body: MeetingCreate) -> Meeting:
     if len(devices) != len(set(devices)):
         raise HTTPException(422, "Each button can belong to one participant only")
     return store.add(Meeting(**body.model_dump()))
+
+
+@router.delete("", status_code=200)
+def delete_history() -> dict:
+    """Clears the archive. The live meeting, if any, is kept."""
+    gone = [m.id for m in list(store.meetings.values()) if m.status != MeetingStatus.live]
+    for meeting_id in gone:
+        store.delete(meeting_id)
+    return {"deleted": len(gone)}
 
 
 @router.get("/{meeting_id}")
@@ -81,6 +90,18 @@ async def end_meeting(meeting_id: str, language: Language | None = None) -> Meet
     await manager.set_leds({"*": "muted"})
     _generate_in_background(meeting, language)
     await manager.broadcast({"type": "meeting_ended", "meeting_id": meeting.id})
+    return meeting
+
+
+@router.post("/{meeting_id}/agenda")
+async def move_agenda(meeting_id: str, body: AgendaMove) -> Meeting:
+    """Chair moves the live meeting to another agenda item (len(agenda) = all items done)."""
+    meeting = _get(meeting_id)
+    if meeting.status != MeetingStatus.live:
+        raise HTTPException(409, "This meeting is not live")
+    meeting.agenda_index = max(0, min(body.index, len(meeting.agenda)))
+    store.save(meeting)
+    await manager.broadcast({"type": "agenda", "meeting_id": meeting.id, "index": meeting.agenda_index})
     return meeting
 
 

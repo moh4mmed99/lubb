@@ -19,4 +19,4 @@ app.include_router(devices.router)
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "version": app.version, "stt": settings.stt_engine, "llm": settings.llm_engine}
+    return {"status": "ok", "version": app.version, "stt": settings.stt_engine, "llm": settings.llm_engine, "mics": settings.mics_enabled}

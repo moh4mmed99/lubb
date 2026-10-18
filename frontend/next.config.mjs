@@ -4,7 +4,7 @@ const HUB_URL = process.env.HUB_URL ?? "http://localhost:8000";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Let phones on the local network load the dev server (simulator).
+  // Let tablets/phones on the local network load the dev server (e.g. a dashboard on the room screen).
   allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "172.*.*.*", "*.local"],
   async rewrites() {
     return [

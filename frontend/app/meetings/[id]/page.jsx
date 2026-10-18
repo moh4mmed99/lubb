@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Avatar, Button, Card, EmptyState, Loading, Notice, inputClass } from "@/components/ui";
+import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, inputClass } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { duration, elapsed, formatDate, mmss, speakingTime } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
@@ -187,6 +187,8 @@ export default function MinutesPage() {
           <Meta label={t("report.duration")} value={meeting.started_at && meeting.ended_at ? duration(meeting.started_at, meeting.ended_at, lng) : "—"} />
           <Meta label={t("report.attendees")} value={String(meeting.participants.length)} />
         </dl>
+
+        <AgendaCoverage meeting={meeting} />
 
         {meeting.report_pending ? (
           <div className="flex items-center gap-3 py-12 text-sm text-muted">
@@ -373,6 +375,34 @@ function AddButton({ onClick, label }) {
   );
 }
 
+/** Each agenda item: discussed or not, with how many contributions and how much talk time it got. */
+function AgendaCoverage({ meeting }) {
+  const { t } = useTranslation();
+  if (!meeting.agenda.length) return null;
+  return (
+    <Section title={t("report.agenda")}>
+      <ol className="divide-y divide-line border-y border-line">
+        {meeting.agenda.map((item, i) => {
+          const said = meeting.utterances.filter((u) => u.agenda_index === i);
+          const secs = said.reduce((sum, u) => sum + (Date.parse(u.ended_at) - Date.parse(u.started_at)) / 1000, 0);
+          return (
+            <li key={i} className="flex items-center gap-3 py-3">
+              <span className="font-mono text-xs text-muted">{String(i + 1).padStart(2, "0")}</span>
+              <bdi className="flex-1">{item}</bdi>
+              {said.length > 0 && (
+                <span className="hidden text-xs text-muted sm:inline">
+                  {t("report.contributions", { count: said.length })} · <span dir="ltr">{mmss(Math.round(secs))}</span>
+                </span>
+              )}
+              <Badge tone={said.length ? "ok" : "muted"}>{said.length ? t("report.covered") : t("report.skipped")}</Badge>
+            </li>
+          );
+        })}
+      </ol>
+    </Section>
+  );
+}
+
 function SpeakingTime({ meeting }) {
   const { t } = useTranslation();
   const talk = speakingTime(meeting);
@@ -382,7 +412,7 @@ function SpeakingTime({ meeting }) {
       <ul className="space-y-3">
         {meeting.participants.map((p) => (
           <li key={p.id} className="flex items-center gap-3">
-            <Avatar name={p.name} color={p.color} size="sm" />
+            <Avatar name={p.name} color={p.color} photo={p.photo} size="sm" />
             <div className="w-28 shrink-0">
               <div className="text-sm">{p.name}</div>
               <div className="text-xs text-muted">{p.title}</div>

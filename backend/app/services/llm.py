@@ -22,11 +22,20 @@ INSTRUCTIONS = """Return JSON only, with this shape:
  "tasks": [{"text": "...", "owner": "<participant name or null>", "due_date": "YYYY-MM-DD or null"}]}"""
 
 
+def _agenda(meeting: Meeting) -> str:
+    return "\n".join(f"{i + 1}. {item}" for i, item in enumerate(meeting.agenda)) or "(none)"
+
+
 def _transcript(meeting: Meeting) -> str:
+    """Transcript grouped under agenda-item headings, so the minutes can follow the agenda."""
     names = {p.id: p.name for p in meeting.participants}
-    return "\n".join(
-        f"[{u.started_at:%H:%M:%S}] {names.get(u.participant_id, '?')}: {u.text}" for u in meeting.utterances
-    )
+    lines, item = [], None
+    for u in meeting.utterances:
+        if u.agenda_index is not None and u.agenda_index != item and u.agenda_index < len(meeting.agenda):
+            item = u.agenda_index
+            lines.append(f"\n## Agenda item {item + 1}: {meeting.agenda[item]}")
+        lines.append(f"[{u.started_at:%H:%M:%S}] {names.get(u.participant_id, '?')}: {u.text}")
+    return "\n".join(lines)
 
 
 async def generate_report(meeting: Meeting, language: str) -> Report:
@@ -39,7 +48,7 @@ async def generate_report(meeting: Meeting, language: str) -> Report:
         content = await _chat(
             [
                 {"role": "system", "content": PROMPT[language] + "\n" + INSTRUCTIONS},
-                {"role": "user", "content": f"Agenda: {meeting.agenda}\n\nTranscript:\n{_transcript(meeting)}"},
+                {"role": "user", "content": f"Agenda:\n{_agenda(meeting)}\n\nTranscript:\n{_transcript(meeting)}"},
             ]
         )
     except Exception as exc:  # the secretary can still write the minutes by hand

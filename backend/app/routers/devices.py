@@ -1,4 +1,4 @@
-"""Speaker buttons (real hardware or the browser simulator) connect here.
+"""Speaker buttons connect here.
 
 Protocol: docs/device-protocol.md
 """
@@ -12,12 +12,14 @@ from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from .. import state
+from ..config import settings
 from ..models import FloorMode, Meeting, Utterance
 from ..realtime import manager
 from ..services import stt
 from ..store import store
 
 router = APIRouter(tags=["devices"])
+REPLACED = 4001  # WebSocket close code: another connection took over this device_id
 log = logging.getLogger(__name__)
 
 
@@ -28,7 +30,7 @@ def list_devices() -> list[dict]:
 
 
 def _initial_led() -> str:
-    if not store.active:
+    if not settings.mics_enabled or not store.active:
         return "muted"
     if state.floor.mode == FloorMode.one_at_a_time and state.floor.talking:
         return "muted"
@@ -40,9 +42,15 @@ async def device_ws(ws: WebSocket, device_id: str) -> None:
     await ws.accept()
     if old := manager.devices.get(device_id):  # same button reconnecting: drop the stale socket
         try:
-            await old.close()
+            # A distinct close code tells the replaced connection not to reconnect and fight over the button
+            await old.close(code=REPLACED, reason="replaced")
         except Exception:
             pass
+        manager.devices.pop(device_id, None)
+    # A fresh connection is never mid-turn: drop any floor the old socket still held,
+    # or the button would stay "talking" (and everyone else muted) forever.
+    if state.floor.is_talking(device_id) or device_id in state.floor.queue:
+        await manager.set_leds(state.floor.release(device_id))
     manager.devices[device_id] = ws
     manager.leds[device_id] = _initial_led()
     await manager.broadcast({"type": "device_connected", "device_id": device_id})
@@ -58,7 +66,7 @@ async def device_ws(ws: WebSocket, device_id: str) -> None:
             if msg["type"] == "websocket.disconnect":
                 break
             if msg.get("bytes") is not None:
-                if state.floor.is_talking(device_id):
+                if settings.mics_enabled and state.floor.is_talking(device_id):
                     # turn may start on button_down or when the queue hands us the floor
                     turn_started = turn_started or datetime.now()
                     audio.extend(msg["bytes"])
@@ -67,7 +75,7 @@ async def device_ws(ws: WebSocket, device_id: str) -> None:
             event = json.loads(msg["text"])
             kind = event.get("type")
 
-            if kind == "button_down" and store.active:
+            if kind == "button_down" and store.active and settings.mics_enabled:
                 changes = state.floor.request(device_id)
                 if changes.get(device_id) == "talking":
                     audio.clear()
@@ -105,13 +113,21 @@ def _start_turn_task(device_id: str, pcm: bytes, started: datetime) -> None:
     participant = store.participant_for_device(device_id)
     if not meeting or not participant:
         return
-    task = asyncio.create_task(_finish_turn(meeting, participant.id, device_id, pcm, started, datetime.now()))
+    # Tag the turn with the item under discussion now, not when transcription finishes
+    item = meeting.agenda_index if meeting.agenda_index < len(meeting.agenda) else None
+    task = asyncio.create_task(_finish_turn(meeting, participant.id, device_id, pcm, started, datetime.now(), item))
     state.pending_turns.add(task)
     task.add_done_callback(state.pending_turns.discard)
 
 
 async def _finish_turn(
-    meeting: Meeting, participant_id: str, device_id: str, pcm: bytes, started: datetime, ended: datetime
+    meeting: Meeting,
+    participant_id: str,
+    device_id: str,
+    pcm: bytes,
+    started: datetime,
+    ended: datetime,
+    agenda_index: int | None = None,
 ) -> None:
     # Whisper is CPU/GPU bound (or a network call when remote) — run it off the event loop
     try:
@@ -122,7 +138,14 @@ async def _finish_turn(
         return
     if not text.strip():
         return
-    utterance = Utterance(participant_id=participant_id, started_at=started, ended_at=ended, text=text, language=lang)
+    utterance = Utterance(
+        participant_id=participant_id,
+        started_at=started,
+        ended_at=ended,
+        text=text,
+        language=lang,
+        agenda_index=agenda_index,
+    )
     # Turns can finish transcribing out of order; keep the transcript in speaking order.
     bisect.insort(meeting.utterances, utterance, key=lambda u: u.started_at)
     store.save(meeting)

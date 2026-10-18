@@ -12,6 +12,7 @@
   --danger: #dc2626;
   --ok: #16a34a;
   --warn: #d97706;
+  --line-strong: #a1a1aa; /* chart de-emphasis (sparklines, neutral segments) */
   color-scheme: light;
 }
 
@@ -26,6 +27,7 @@
   --danger: #ef4444;
   --ok: #22c55e;
   --warn: #f59e0b;
+  --line-strong: #52525b;
   color-scheme: dark;
 }
 

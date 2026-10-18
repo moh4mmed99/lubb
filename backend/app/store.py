@@ -31,6 +31,8 @@ class Store:
         return self.save(meeting)
 
     def save(self, meeting: Meeting) -> Meeting:
+        if meeting.id not in self.meetings:  # deleted meanwhile (e.g. while its minutes were being written)
+            return meeting
         self.db.execute(
             "INSERT OR REPLACE INTO meetings (id, data) VALUES (?, ?)", (meeting.id, meeting.model_dump_json())
         )
