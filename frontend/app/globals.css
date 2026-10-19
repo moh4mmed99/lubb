@@ -1,45 +1,72 @@
 @import "tailwindcss";
 
-/* Design tokens — light by default, dark via data-theme on <html> (see lib/theme.js) */
+/* Design tokens — light by default, dark via data-theme on <html> (see lib/theme.js).
+   Minimal, flat palette: grey ground, white or black boxes, one green signal colour.
+   No gradients, no shadows, square corners. */
 :root {
-  --bg: #fafafa;
+  --bg: #e4e4e2;
   --card: #ffffff;
-  --subtle: #f4f4f5;
-  --fg: #18181b;
-  --muted: #71717a;
-  --line: #e4e4e7;
-  --accent: #2563eb;
-  --danger: #dc2626;
-  --ok: #16a34a;
-  --warn: #d97706;
-  --line-strong: #a1a1aa; /* chart de-emphasis (sparklines, neutral segments) */
+  --subtle: #f1f1ef;
+  --fg: #0b0b0b;
+  --muted: #6a6a66;
+  --line: #d2d2ce;
+  --accent: #0a8a45; /* green that reads as text on white */
+  --signal: #26c96f; /* the bright green: fills only, always with black text on it */
+  --danger: #d92d20;
+  --ok: #0a8a45;
+  --warn: #b26a00;
+  --line-strong: #a3a39e; /* chart de-emphasis (sparklines, neutral segments) */
+  /* Side rail (navigation): the inverse of the page — black beside a light page… */
+  --rail: #000000;
+  --rail-fg: #ffffff;
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #0b0b0d;
-  --card: #141417;
-  --subtle: #1c1c20;
-  --fg: #f4f4f5;
-  --muted: #a1a1aa;
-  --line: #27272a;
-  --accent: #3b82f6;
-  --danger: #ef4444;
-  --ok: #22c55e;
-  --warn: #f59e0b;
-  --line-strong: #52525b;
+  --bg: #000000;
+  --card: #0f0f0f;
+  --subtle: #1a1a1a;
+  --fg: #ededeb;
+  --muted: #8f8f8a;
+  --line: #2a2a2a;
+  --accent: #2fd57a;
+  --signal: #26c96f;
+  --danger: #ff5a4e;
+  --ok: #2fd57a;
+  --warn: #f5a524;
+  --line-strong: #55554f;
+  /* …and the page's light grey beside a black page, so the two always contrast */
+  --rail: #e4e4e2;
+  --rail-fg: #0b0b0b;
   color-scheme: dark;
 }
 
+/* Softened corners: a little rounding keeps the bold look without hard edges.
+   Cards use xl, buttons/inputs lg, small chips md (round things like avatars use rounded-full). */
+@theme {
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+}
+
 @theme inline {
-  --font-sans: var(--font-plex), system-ui, sans-serif;
+  /* Latin in Hanken Grotesk, Arabic falls through to IBM Plex Sans Arabic */
+  --font-sans: var(--font-grotesk), var(--font-plex), system-ui, sans-serif;
+  --font-brand: var(--font-display), var(--font-plex), system-ui, sans-serif;
   --color-bg: var(--bg);
+  --color-rail: var(--rail);
+  --color-rail-fg: var(--rail-fg);
   --color-card: var(--card);
   --color-subtle: var(--subtle);
   --color-fg: var(--fg);
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-accent: var(--accent);
+  --color-signal: var(--signal);
   --color-danger: var(--danger);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
@@ -54,9 +81,28 @@ body {
   @apply bg-bg font-sans text-fg antialiased;
 }
 
+/* Small uppercase caption, as in "MEETING · 12 PARTICIPANTS" */
+.label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 @keyframes bar {
   0%, 100% { transform: scaleY(0.3); }
   50% { transform: scaleY(1); }
+}
+
+/* Page, list and hover motion live in components/motion.jsx (Framer Motion). */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media print {

@@ -1,69 +1,22 @@
 "use client";
 
-import { Archive, Check, ChevronLeft, ChevronRight, ListChecks, Mic, PlusCircle, Square } from "lucide-react";
+import { Archive, Check, ChevronLeft, ChevronRight, ListChecks, Mic, MonitorPlay, PlusCircle, Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ChairPanel } from "@/components/ChairPanel";
 import { MeetingStats } from "@/components/MeetingStats";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, Segmented, VoiceBars } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
-import { addUtterance, elapsed, formatDate } from "@/lib/format";
-import { useHub } from "@/lib/useHub";
+import { elapsed, formatDate } from "@/lib/format";
+import { useLiveMeeting } from "@/lib/useLiveMeeting";
 
 export default function LiveMeetingPage() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
-  const [meeting, setMeeting] = useState(undefined); // undefined = loading, null = no live meeting
-  const [devices, setDevices] = useState({}); // device_id -> { state, battery }
-  const [error, setError] = useState(null);
+  const { meeting, setMeeting, devices, error, setError, connected, stateOf } = useLiveMeeting();
   const [ending, setEnding] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const [all, devs] = await Promise.all([api("/meetings"), api("/devices")]);
-      setMeeting(all.find((m) => m.status === "live") ?? null);
-      setDevices(Object.fromEntries(devs.map((d) => [d.device_id, d])));
-      setError(null);
-    } catch (err) {
-      setError(errorText(err, t));
-    }
-  }, [t]);
-
-  const connected = useHub((e) => {
-    switch (e.type) {
-      case "utterance":
-        setMeeting((m) => (m && m.id === e.meeting_id ? { ...m, utterances: addUtterance(m.utterances, e.utterance) } : m));
-        break;
-      case "speaker_state":
-        setDevices((d) => ({ ...d, [e.device_id]: { ...d[e.device_id], device_id: e.device_id, state: e.state } }));
-        break;
-      case "device_connected":
-        setDevices((d) => ({ ...d, [e.device_id]: { device_id: e.device_id, state: null, battery: null } }));
-        break;
-      case "device_disconnected":
-        setDevices(({ [e.device_id]: _gone, ...rest }) => rest);
-        break;
-      case "battery":
-        setDevices((d) => (d[e.device_id] ? { ...d, [e.device_id]: { ...d[e.device_id], battery: e.level } } : d));
-        break;
-      case "agenda":
-        setMeeting((m) => (m && m.id === e.meeting_id ? { ...m, agenda_index: e.index } : m));
-        break;
-      case "meeting_started":
-      case "meeting_ended":
-        load();
-        break;
-      case "error":
-        setError(`${t("live.sttError")}: ${e.message}`);
-        break;
-    }
-  });
-
-  // (Re)load whenever the hub connection comes up, so nothing is missed while it was down.
-  useEffect(() => {
-    if (connected) load();
-  }, [connected, load]);
 
   const endMeeting = async () => {
     if (!meeting || !confirm(t("live.endConfirm"))) return;
@@ -92,12 +45,12 @@ export default function LiveMeetingPage() {
   const offline = !connected && <Notice tone="danger">{t("common.hubDown")}</Notice>;
 
   if (meeting === undefined) {
-    return <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-8">{offline || <Loading />}</div>;
+    return <div className="me-auto max-w-7xl space-y-4 p-4 md:p-8">{offline || <Loading />}</div>;
   }
 
   if (meeting === null) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-8">
+      <div className="me-auto max-w-3xl space-y-4 p-4 md:p-8">
         {offline}
         {error && <Notice tone="danger">{error}</Notice>}
         <Card>
@@ -120,14 +73,10 @@ export default function LiveMeetingPage() {
     );
   }
 
-  const stateOf = (p) => {
-    const dev = p.device_id && devices[p.device_id];
-    return dev ? dev.state || "ready" : "offline";
-  };
   const speaking = meeting.participants.find((p) => stateOf(p) === "talking");
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-5 p-4 md:p-8 lg:h-full">
+    <div className="me-auto flex max-w-7xl flex-col gap-5 p-4 md:p-8 lg:h-full">
       {offline}
       {error && (
         <Notice tone="danger" action={<button className="text-xs text-muted hover:text-fg" onClick={() => setError(null)}>✕</button>}>
@@ -138,7 +87,7 @@ export default function LiveMeetingPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight md:text-2xl">
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
             <bdi>{meeting.title}</bdi>
           </h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
@@ -162,6 +111,12 @@ export default function LiveMeetingPage() {
             {t("live.recording")}
           </span>
           <Clock since={meeting.started_at} />
+          <Link href="/stage">
+            <Button>
+              <MonitorPlay size={16} />
+              {t("stage.open")}
+            </Button>
+          </Link>
           <Button variant="danger" onClick={endMeeting} disabled={ending}>
             <Square size={14} fill="currentColor" />
             {ending ? t("live.ending") : t("live.end")}
@@ -178,20 +133,19 @@ export default function LiveMeetingPage() {
           return (
             <div
               key={p.id}
-              className={`flex items-center gap-2.5 rounded-full border py-1.5 ps-1.5 pe-4 transition ${
-                talking ? "bg-card" : "border-line bg-card/50"
+              className={`flex items-center gap-2.5 border py-1.5 ps-1.5 pe-4 transition-colors ${
+                talking ? "border-signal bg-signal text-black" : "border-line bg-card"
               }`}
-              style={talking ? { borderColor: p.color } : undefined}
               title={p.device_id ? `${p.device_id}${battery != null ? ` · ${battery}%` : ""}` : undefined}
             >
-              <Avatar name={p.name} color={p.color} photo={p.photo} size="sm" ring={talking} dim={state === "offline"} />
+              <Avatar name={p.name} color={p.color} photo={p.photo} size="sm" dim={state === "offline"} />
               <div className="leading-tight">
                 <div className="text-sm font-medium">{p.name}</div>
-                <div className={`text-[11px] ${state === "waiting" ? "text-warn" : state === "offline" ? "text-danger" : "text-muted"}`}>
+                <div className={`text-[11px] ${talking ? "text-black/70" : state === "waiting" ? "text-warn" : state === "offline" ? "text-danger" : "text-muted"}`}>
                   {t(`speaker.${state}`)}
                 </div>
               </div>
-              {talking && <VoiceBars color={p.color} />}
+              {talking && <VoiceBars color="#000" />}
             </div>
           );
         })}
@@ -214,7 +168,7 @@ function Clock({ since }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <span className="font-mono text-lg tabular-nums" dir="ltr">
+    <span className="font-mono text-2xl font-semibold tabular-nums" dir="ltr">
       {now ? elapsed(since, now.toISOString()) : "00:00:00"}
     </span>
   );
@@ -275,6 +229,7 @@ function SidePanel({ meeting, onMoveAgenda }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {meeting.floor_mode === "chairman" && <ChairPanel meeting={meeting} />}
       <Card className="flex flex-col">
         <div className="border-b border-line p-3">
           <Segmented
@@ -356,7 +311,7 @@ function AgendaFooter({ total, current, onMove }) {
       {/* progress: one segment per item */}
       <div className="flex flex-1 gap-1">
         {Array.from({ length: total }, (_, i) => (
-          <span key={i} className={`h-1 flex-1 rounded-full ${i < current ? "bg-fg" : i === current ? "bg-accent" : "bg-line"}`} />
+          <span key={i} className={`h-1 flex-1 ${i < current ? "bg-fg" : i === current ? "bg-signal" : "bg-line"}`} />
         ))}
       </div>
       {current >= total ? (

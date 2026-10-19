@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Plus, Star, X } from "lucide-react";
+import { Camera, Plus, SlidersHorizontal, Star, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -98,7 +98,7 @@ export default function SetupPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
+    <div className="me-auto max-w-6xl space-y-6 p-4 md:p-8">
       <PageHeader
         title={t("setup.title")}
         subtitle={t("setup.subtitle")}
@@ -109,7 +109,7 @@ export default function SetupPage() {
         }
       />
 
-      {!connected && <Notice tone="danger">{t("common.hubDown")}</Notice>}
+      {connected === false && <Notice tone="danger">{t("common.hubDown")}</Notice>}
       {live && (
         <Notice
           tone="warn"
@@ -127,7 +127,7 @@ export default function SetupPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Details */}
         <Card>
-          <CardHeader title={t("setup.details")} />
+          <CardHeader icon={SlidersHorizontal} title={t("setup.details")} />
           <div className="space-y-5 p-5">
             <Field label={t("setup.meetingTitle")}>
               <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("setup.meetingTitlePh")} />
@@ -151,7 +151,7 @@ export default function SetupPage() {
                 <Segmented
                   value={floorMode}
                   onChange={setFloorMode}
-                  options={["free", "one_at_a_time", "queue"].map((m) => ({ value: m, label: t(`setup.floor.${m}`) }))}
+                  options={["free", "one_at_a_time", "queue", "chairman"].map((m) => ({ value: m, label: t(`setup.floor.${m}`) }))}
                 />
               </div>
               <p className="text-xs text-muted">{t(`setup.floorHint.${floorMode}`)}</p>
@@ -195,6 +195,7 @@ export default function SetupPage() {
         {/* Participants */}
         <Card>
           <CardHeader
+            icon={Users}
             title={t("setup.participants")}
             action={
               <span className="font-mono text-xs text-muted" dir="ltr">

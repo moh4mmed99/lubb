@@ -1,4 +1,4 @@
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Alexandria, Hanken_Grotesk, IBM_Plex_Sans_Arabic } from "next/font/google";
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/AppShell";
 import { Providers } from "./providers";
@@ -11,8 +11,24 @@ const plex = IBM_Plex_Sans_Arabic({
   display: "swap",
 });
 
+// Latin text: a tight grotesk (Arabic text falls back to Plex)
+const grotesk = Hanken_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-grotesk",
+  display: "swap",
+});
+
+// The لُبّ wordmark: heavy and chunky
+const display = Alexandria({
+  subsets: ["arabic"],
+  weight: ["900"],
+  variable: "--font-display",
+  display: "swap",
+});
+
 export const metadata = {
-  title: "LUBB AI",
+  title: "لُبّ · LUBB", // Arabic name with the Latin one beside it (browser tab, bookmarks)
   description: "Smart meeting system — نظام الاجتماعات الذكي",
   icons: { icon: "/favicon.svg" },
 };
@@ -24,7 +40,7 @@ export default async function RootLayout({ children }) {
   // Language lives in a cookie so the server renders the right direction (RTL/LTR) from the start.
   const lang = (await cookies()).get("lang")?.value === "en" ? "en" : "ar";
   return (
-    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} className={plex.variable} suppressHydrationWarning>
+    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} className={`${plex.variable} ${grotesk.variable} ${display.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

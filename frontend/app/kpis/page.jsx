@@ -1,9 +1,10 @@
 "use client";
 
-import { AlertCircle, BarChart3, CheckCircle2, Clock, Maximize2, PlusCircle, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertCircle, BarChart3, CalendarDays, CheckCircle2, Clock, ListTodo, Maximize2, PlusCircle, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Stagger, StaggerItem } from "@/components/motion";
 import { Button, Card, CardHeader, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -37,7 +38,7 @@ export default function KpisPage() {
   const kpis = meetings && computeKpis(meetings);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
+    <div className="me-auto max-w-6xl space-y-6 p-4 md:p-8">
       <PageHeader
         title={t("kpi.title")}
         subtitle={t("kpi.subtitle")}
@@ -67,11 +68,14 @@ export default function KpisPage() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {kpis.tiles.map((k) => (
-              <StatTile key={k.key} kpi={k} />
+          {/* 5-column grid: the headline KPI (meetings) takes two columns, the other three one each */}
+          <Stagger className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            {kpis.tiles.map((k, i) => (
+              <StaggerItem key={k.key} className={i === 0 ? "col-span-2" : ""}>
+                <StatTile kpi={k} featured={i === 0} />
+              </StaggerItem>
             ))}
-          </div>
+          </Stagger>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <MeetingsColumns data={kpis.perMonth} />
             <TaskStatus data={kpis.taskStatus} />
@@ -90,7 +94,7 @@ function formatValue(format, v, lng, t) {
   return n;
 }
 
-function StatTile({ kpi }) {
+function StatTile({ kpi, featured = false }) {
   const { t, i18n } = useTranslation();
   const up = kpi.delta >= 0;
   const good = up === kpi.upIsGood; // color = direction × whether up is good
@@ -99,9 +103,9 @@ function StatTile({ kpi }) {
   const scope = kpi.format === "percent" ? t("kpi.allTime") : t("kpi.thisMonth");
 
   return (
-    <Card className="p-5">
-      <div className="text-sm text-muted">{t(`kpi.${kpi.key}`)}</div>
-      <div className="mt-2 whitespace-nowrap text-2xl font-semibold tracking-tight sm:text-3xl">
+    <Card interactive className={`h-full p-5 ${featured ? "border-fg! bg-fg! text-bg" : ""}`}>
+      <div className={`text-sm ${featured ? "text-bg/70" : "text-muted"}`}>{t(`kpi.${kpi.key}`)}</div>
+      <div className={`mt-2 whitespace-nowrap font-semibold tracking-tight ${featured ? "text-5xl sm:text-6xl" : "text-2xl sm:text-3xl"}`}>
         <bdi>{formatValue(kpi.format, kpi.value, i18n.language, t)}</bdi>
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
@@ -113,10 +117,10 @@ function StatTile({ kpi }) {
               {/* unit lives in the title; only % is kept so "+6%" isn't read as +6 tasks */}
               {formatValue(kpi.format === "percent" ? "percent" : "count", kpi.delta, i18n.language, t)}
             </span>
-            <span className="hidden text-muted sm:inline">{t("kpi.vsLast")}</span>
+            <span className={`hidden sm:inline ${featured ? "text-bg/60" : "text-muted"}`}>{t("kpi.vsLast")}</span>
           </span>
         ) : (
-          <span className="text-xs text-muted">{scope}</span>
+          <span className={`text-xs ${featured ? "text-bg/60" : "text-muted"}`}>{scope}</span>
         )}
         <Sparkline values={kpi.trend} />
       </div>
@@ -152,7 +156,7 @@ function MeetingsColumns({ data }) {
 
   return (
     <Card>
-      <CardHeader title={t("kpi.perMonth")} action={<span className="text-xs text-muted">{t("kpi.meetingsUnit")}</span>} />
+      <CardHeader icon={CalendarDays} title={t("kpi.perMonth")} action={<span className="text-xs text-muted">{t("kpi.meetingsUnit")}</span>} />
       <div className="p-5">
         <div className="relative h-56">
           {/* recessive grid */}
@@ -199,7 +203,7 @@ function TaskStatus({ data }) {
 
   return (
     <Card>
-      <CardHeader title={t("kpi.tasks")} action={<span className="text-xs text-muted">{t("kpi.taskTotal", { count: total })}</span>} />
+      <CardHeader icon={ListTodo} title={t("kpi.tasks")} action={<span className="text-xs text-muted">{t("kpi.taskTotal", { count: total })}</span>} />
       {total === 0 ? (
         <p className="p-5 text-sm text-muted">{t("kpi.noTasks")}</p>
       ) : (

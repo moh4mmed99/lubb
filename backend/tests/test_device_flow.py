@@ -180,3 +180,75 @@ def test_deleted_meeting_is_not_resurrected_by_a_late_save():
         store.save(meeting)  # what a finishing report task does
         assert client.get(f"/api/meetings/{m['id']}").status_code == 404
         assert Store(store.db.execute("PRAGMA database_list").fetchone()[2]).get(m["id"]) is None
+
+
+def test_chairman_mode_end_to_end():
+    with TestClient(app) as client:
+        meeting = client.post(
+            "/api/meetings",
+            json={
+                "title": "Chair",
+                "floor_mode": "chairman",
+                "participants": [
+                    {"name": "رئيس", "device_id": "btn-11", "is_chair": True},
+                    {"name": "عضو", "device_id": "btn-12"},
+                ],
+            },
+        ).json()
+        mid = meeting["id"]
+        assert client.post(f"/api/meetings/{mid}/floor/grant", json={"device_id": "btn-12"}).status_code == 409  # not live
+        client.post(f"/api/meetings/{mid}/start")
+
+        with client.websocket_connect("/api/meetings/ws") as dash, client.websocket_connect("/ws/device/btn-12") as member:
+            assert member.receive_json() == {"type": "led", "state": "ready"}
+            member.send_json({"type": "button_down"})  # ask to speak
+            assert member.receive_json() == {"type": "led", "state": "waiting"}
+            member.send_json({"type": "button_up"})
+            assert client.get(f"/api/meetings/{mid}/floor").json() == {"talking": [], "queue": ["btn-12"]}
+
+            assert client.post(f"/api/meetings/{mid}/floor/grant", json={"device_id": "btn-12"}).json()["talking"] == ["btn-12"]
+            assert member.receive_json() == {"type": "led", "state": "talking"}
+
+            member.send_json({"type": "button_down"})  # holds to talk
+            member.send_bytes(b"\x00\x00" * 8_000)
+            member.send_json({"type": "button_up"})
+            event = dash.receive_json()
+            while event["type"] != "utterance":
+                event = dash.receive_json()
+            assert client.get(f"/api/meetings/{mid}/floor").json()["talking"] == ["btn-12"]  # floor kept
+
+            client.post(f"/api/meetings/{mid}/floor/revoke")
+            assert member.receive_json() == {"type": "led", "state": "ready"}
+            assert client.get(f"/api/meetings/{mid}/floor").json() == {"talking": [], "queue": []}
+
+        client.post(f"/api/meetings/{mid}/end")
+        _wait_for_report(client, mid)
+
+
+def test_minutes_export_to_word():
+    import io
+
+    from docx import Document
+
+    with TestClient(app) as client:
+        meeting = client.post(
+            "/api/meetings",
+            json={"title": "مراجعة الميزانية", "agenda": ["البند الأول"], "participants": [{"name": "خالد", "is_chair": True}]},
+        ).json()
+        client.post(f"/api/meetings/{meeting['id']}/start")
+        client.post(f"/api/meetings/{meeting['id']}/end")
+        done = _wait_for_report(client, meeting["id"])
+        client.put(
+            f"/api/meetings/{meeting['id']}/report",
+            json=done["report"] | {"tasks": [{"id": "t1", "text": "إعداد الخطة", "owner_id": done["participants"][0]["id"], "due_date": "2026-11-01", "done": False}]},
+        )
+
+        res = client.get(f"/api/meetings/{meeting['id']}/export/docx")
+        assert res.status_code == 200
+        assert res.headers["content-type"].startswith("application/vnd.openxmlformats")
+        assert "filename*=UTF-8''" in res.headers["content-disposition"]
+        doc = Document(io.BytesIO(res.content))
+        text = "\n".join(p.text for p in doc.paragraphs)
+        assert "مراجعة الميزانية" in text and "جدول الأعمال" in text and "البند الأول" in text
+        cells = [c.text for t in doc.tables for row in t.rows for c in row.cells]
+        assert "إعداد الخطة" in cells and "خالد" in cells

@@ -1,14 +1,16 @@
 import asyncio
 from datetime import datetime
+from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Response, WebSocket, WebSocketDisconnect
 
 from .. import state
 from ..floor_control import FloorController
-from ..models import AgendaMove, Language, Meeting, MeetingCreate, MeetingStatus, Report
+from ..models import AgendaMove, FloorMode, FloorMove, Language, Meeting, MeetingCreate, MeetingStatus, Report
 from ..realtime import manager
-from ..services import llm
+from ..services import export, llm
 from ..store import store
+from .devices import apply_floor, finish_turn
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 _report_tasks: set[asyncio.Task] = set()
@@ -70,7 +72,7 @@ async def start_meeting(meeting_id: str) -> Meeting:
     meeting.started_at = meeting.started_at or datetime.now()
     store.active_meeting_id = meeting.id
     store.save(meeting)
-    state.floor = FloorController(mode=meeting.floor_mode)
+    state.floor = state.floor_for(meeting)
     await manager.set_leds({"*": "ready"})
     await manager.broadcast({"type": "meeting_started", "meeting_id": meeting.id})
     return meeting
@@ -84,6 +86,7 @@ async def end_meeting(meeting_id: str, language: Language | None = None) -> Meet
         raise HTTPException(409, "This meeting is not live")
     meeting.status = MeetingStatus.ended
     meeting.ended_at = datetime.now()
+    meeting.now_showing = None
     if store.active_meeting_id == meeting.id:
         store.active_meeting_id = None
     state.floor = FloorController()
@@ -91,6 +94,53 @@ async def end_meeting(meeting_id: str, language: Language | None = None) -> Meet
     _generate_in_background(meeting, language)
     await manager.broadcast({"type": "meeting_ended", "meeting_id": meeting.id})
     return meeting
+
+
+def _live_chairman(meeting_id: str) -> Meeting:
+    meeting = _get(meeting_id)
+    if meeting.status != MeetingStatus.live or store.active_meeting_id != meeting.id:
+        raise HTTPException(409, "This meeting is not live")
+    if meeting.floor_mode != FloorMode.chairman:
+        raise HTTPException(409, "The chair controls the floor only in chairman mode")
+    return meeting
+
+
+@router.get("/{meeting_id}/floor")
+def get_floor(meeting_id: str) -> dict:
+    """Who has the floor and who is waiting, in order (for the chair's panel)."""
+    _get(meeting_id)
+    live = store.active_meeting_id == meeting_id
+    return {"talking": list(state.floor.talking) if live else [], "queue": list(state.floor.queue) if live else []}
+
+
+@router.post("/{meeting_id}/floor/grant")
+async def grant_floor(meeting_id: str, body: FloorMove) -> dict:
+    """Chair gives the floor to a button (usually the next in the queue)."""
+    _live_chairman(meeting_id)
+    for d in state.floor.talking:
+        if d != body.device_id:
+            finish_turn(d)  # keep what the previous speaker said
+    await apply_floor(state.floor.grant(body.device_id))
+    return get_floor(meeting_id)
+
+
+@router.post("/{meeting_id}/floor/revoke")
+async def revoke_floor(meeting_id: str) -> dict:
+    """Chair takes the floor back."""
+    _live_chairman(meeting_id)
+    for d in state.floor.talking:
+        finish_turn(d)
+    await apply_floor(state.floor.revoke())
+    return get_floor(meeting_id)
+
+
+@router.post("/{meeting_id}/floor/dismiss")
+async def dismiss_request(meeting_id: str, body: FloorMove) -> dict:
+    """Chair removes a raised hand from the queue."""
+    _live_chairman(meeting_id)
+    if body.device_id in state.floor.queue:
+        await apply_floor(state.floor.drop(body.device_id))
+    return get_floor(meeting_id)
 
 
 @router.post("/{meeting_id}/agenda")
@@ -134,6 +184,19 @@ def _generate_in_background(meeting: Meeting, language: Language | None) -> None
     task = asyncio.create_task(run())
     _report_tasks.add(task)
     task.add_done_callback(_report_tasks.discard)
+
+
+@router.get("/{meeting_id}/export/docx")
+def export_docx(meeting_id: str) -> Response:
+    """The minutes as a Word document (letterhead from ORG_NAME)."""
+    meeting = _get(meeting_id)
+    filename = f"{meeting.title} - {meeting.started_at:%Y-%m-%d}.docx" if meeting.started_at else f"{meeting.title}.docx"
+    return Response(
+        export.minutes_docx(meeting),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        # filename* carries Arabic titles intact; the plain one is an ASCII fallback
+        headers={"Content-Disposition": f"attachment; filename=minutes.docx; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.put("/{meeting_id}/report")

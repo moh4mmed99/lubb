@@ -5,7 +5,7 @@ const MONTHS = 6;
 const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
 /** The last MONTHS month keys, oldest first, ending with the current month. */
-export function recentMonths(now = new Date()) {
+function recentMonths(now = new Date()) {
   return Array.from({ length: MONTHS }, (_, i) => monthKey(new Date(now.getFullYear(), now.getMonth() - (MONTHS - 1 - i), 1)));
 }
 

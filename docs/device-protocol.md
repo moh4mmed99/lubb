@@ -60,4 +60,4 @@ new modes need no firmware change.
 | `free`          | Anyone may talk at any time (up to `max_concurrent`). |
 | `one_at_a_time` | Only one speaker; others get `muted` until the floor is free. |
 | `queue`         | Others get `waiting`; the floor passes in order of request. |
-| `chairman` *(planned)* | The chair grants/revokes the floor from the dashboard. |
+| `chairman`      | Pressing asks to speak (`waiting`). The chair gives the floor from the dashboard (`talking`); the speaker then holds the button to talk as usual, and keeps the floor across presses until the chair takes it back or gives it to someone else. The chair's own button speaks straight away when nobody has the floor. |

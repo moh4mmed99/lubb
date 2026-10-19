@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, Download, FileQuestion, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Check, Download, FileQuestion, FileText, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, inputClass } from "@/components/ui";
@@ -40,6 +40,15 @@ export default function MinutesPage() {
   useEffect(() => {
     if (connected) load();
   }, [connected, load]);
+
+  const printed = useRef(false);
+  useEffect(() => {
+    if (printed.current || !meeting?.report || meeting.report_pending) return;
+    if (new URLSearchParams(window.location.search).get("print") === "1") {
+      printed.current = true;
+      setTimeout(() => window.print(), 300); // let fonts and layout settle first
+    }
+  }, [meeting]);
 
   // Belt and braces: poll while the AI is writing, in case the report_ready event was missed.
   useEffect(() => {
@@ -87,11 +96,11 @@ export default function MinutesPage() {
   };
 
   if (meeting === undefined) {
-    return <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-8">{error ? <Notice tone="danger">{error}</Notice> : <Loading />}</div>;
+    return <div className="me-auto max-w-3xl space-y-4 p-4 md:p-8">{error ? <Notice tone="danger">{error}</Notice> : <Loading />}</div>;
   }
   if (meeting === null) {
     return (
-      <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <div className="me-auto max-w-3xl p-4 md:p-8">
         <Card>
           <EmptyState icon={FileQuestion} title={t("report.notFound")}>
             <Link href="/meetings">
@@ -108,7 +117,7 @@ export default function MinutesPage() {
   const shown = draft ?? report;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
+    <div className="me-auto max-w-5xl space-y-6 p-4 md:p-8">
       {/* Toolbar */}
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
         <StatusBadge meeting={meeting} />
@@ -131,6 +140,14 @@ export default function MinutesPage() {
                   <Download size={16} />
                   {t("report.export")}
                 </Button>
+              )}
+              {report && (
+                <a href={`/api/meetings/${id}/export/docx`} download>
+                  <Button>
+                    <FileText size={16} />
+                    {t("report.exportWord")}
+                  </Button>
+                </a>
               )}
               {report && !report.approved && (
                 <Button onClick={() => setDraft(structuredClone(report))}>
@@ -167,6 +184,8 @@ export default function MinutesPage() {
         </Notice>
       )}
 
+      {/* Document in the wide column, details in a narrow rail beside it (on wide screens) */}
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
       <Card className="p-6 md:p-10">
         {/* Title block */}
         <p className="text-xs font-medium uppercase tracking-wider text-muted">{t("report.label")}</p>
@@ -174,7 +193,8 @@ export default function MinutesPage() {
           <bdi>{meeting.title}</bdi>
         </h1>
 
-        <dl className="mt-6 grid grid-cols-2 gap-4 border-y border-line py-5 text-sm sm:grid-cols-4">
+        {/* On wide screens these move to the rail; printouts (PDF) always keep them in the document */}
+        <dl className="mt-6 grid grid-cols-2 gap-4 border-y border-line py-5 text-sm sm:grid-cols-4 lg:hidden print:grid">
           <Meta label={t("report.date")} value={meeting.started_at ? formatDate(meeting.started_at, lng) : "—"} />
           <Meta
             label={t("report.time")}
@@ -256,6 +276,8 @@ export default function MinutesPage() {
         <SpeakingTime meeting={meeting} />
         <FullTranscript meeting={meeting} />
       </Card>
+      <DetailsRail meeting={meeting} lng={lng} />
+      </div>
     </div>
   );
 }
@@ -445,10 +467,69 @@ function FullTranscript({ meeting }) {
               {elapsed(meeting.started_at, u.started_at)}
             </span>{" "}
             <span className="font-medium">{byId[u.participant_id]?.name}:</span> {u.text}
+            {u.slide && (
+              <span className="ms-2 whitespace-nowrap rounded-md bg-subtle px-1.5 py-0.5 text-[11px] text-muted">
+                {t("report.onSlide", { n: u.slide.slide })}
+              </span>
+            )}
           </p>
         ))}
       </div>
     </details>
+  );
+}
+
+function DetailsRail({ meeting, lng }) {
+  const { t } = useTranslation();
+  const time = meeting.started_at
+    ? `${formatDate(meeting.started_at, lng, { timeStyle: "short" })} – ${meeting.ended_at ? formatDate(meeting.ended_at, lng, { timeStyle: "short" }) : "…"}`
+    : "—";
+  return (
+    <aside className="no-print hidden space-y-6 text-sm lg:sticky lg:top-8 lg:block">
+      <span aria-hidden className="block h-1.5 w-12 bg-fg" />
+      <dl className="space-y-4">
+        <Meta label={t("report.date")} value={meeting.started_at ? formatDate(meeting.started_at, lng, { dateStyle: "full" }) : "—"} />
+        <Meta label={t("report.time")} value={time} />
+        <Meta label={t("report.duration")} value={meeting.started_at && meeting.ended_at ? duration(meeting.started_at, meeting.ended_at, lng) : "—"} />
+      </dl>
+      <div>
+        <p className="mb-3 text-xs text-muted">
+          {t("report.attendees")} · {meeting.participants.length}
+        </p>
+        <ul className="space-y-2.5">
+          {meeting.participants.map((p) => (
+            <li key={p.id} className="flex items-center gap-2.5">
+              <Avatar name={p.name} color={p.color} photo={p.photo} size="sm" />
+              <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              {p.is_chair && <span className="text-xs text-muted">{t("common.chair")}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {meeting.slides_shown?.length > 0 && <SlidesShown meeting={meeting} />}
+    </aside>
+  );
+}
+
+/** Presentations shown during the meeting, with how many of their slides were put up. */
+function SlidesShown({ meeting }) {
+  const { t } = useTranslation();
+  const decks = {};
+  for (const s of meeting.slides_shown) (decks[s.presentation_id] ??= { title: s.title, slides: new Set() }).slides.add(s.slide);
+  return (
+    <div>
+      <p className="mb-3 text-xs text-muted">{t("report.presented")}</p>
+      <ul className="space-y-2">
+        {Object.entries(decks).map(([id, d]) => (
+          <li key={id}>
+            <Link href={`/presentations/${id}`} className="hover:underline">
+              <bdi>{d.title}</bdi>
+            </Link>
+            <span className="text-xs text-muted"> · {t("report.slidesShown", { count: d.slides.size })}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

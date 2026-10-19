@@ -20,7 +20,9 @@ class Settings:
     llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:14b")
     # Shared secret sent as "Authorization: Bearer <token>" to remote AI servers.
     ai_token: str = os.getenv("AI_TOKEN", "")
-    db_path: str = os.getenv("DB_PATH", "data/lubb.db")  # relative to where the hub is started
+    db_path: str = os.getenv("DB_PATH", "data/lubb.db")
+    # Printed at the top of exported minutes (the letterhead), e.g. "وزارة ..." or a company name.
+    org_name: str = os.getenv("ORG_NAME", "")  # relative to where the hub is started
     cors_origins: tuple[str, ...] = ("http://localhost:3000",)
 
     # Audio format agreed in docs/device-protocol.md

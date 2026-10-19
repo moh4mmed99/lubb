@@ -4,6 +4,8 @@ import { Archive, ChevronLeft, ChevronRight, PlusCircle, Search, Trash2, Users }
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AnimatePresence } from "motion/react";
+import { Stagger, StaggerItem } from "@/components/motion";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button, Card, EmptyState, Loading, Notice, PageHeader, inputClass } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -77,7 +79,7 @@ export default function ArchivePage() {
   const deletable = meetings?.some((m) => m.status !== "live");
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
+    <div className="me-auto max-w-4xl space-y-6 p-4 md:p-8">
       <PageHeader
         title={t("history.title")}
         subtitle={t("history.subtitle")}
@@ -115,9 +117,10 @@ export default function ArchivePage() {
             {results.length === 0 ? (
               <p className="p-10 text-center text-sm text-muted">{t("history.empty")}</p>
             ) : (
-              <ul className="divide-y divide-line">
+              <Stagger as="ul" className="divide-y divide-line">
+                <AnimatePresence>
                 {results.map((m) => (
-                  <li key={m.id} className="group flex items-center transition hover:bg-subtle">
+                  <StaggerItem as="li" key={m.id} className="group flex items-center transition-colors hover:bg-subtle">
                     <Link href={m.status === "live" ? "/" : `/meetings/${m.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-4 ps-5">
                       <div className="w-12 shrink-0 text-center">
                         {m.started_at ? (
@@ -142,7 +145,8 @@ export default function ArchivePage() {
                         </div>
                       </div>
                       <StatusBadge meeting={m} />
-                      <Chevron size={16} className="text-muted" />
+                      {/* nudges toward the meeting on hover, in reading direction */}
+                      <Chevron size={16} className="text-muted transition-transform duration-200 group-hover:translate-x-1 rtl:group-hover:-translate-x-1" />
                     </Link>
                     {/* the live meeting must be ended before it can be deleted */}
                     <button
@@ -154,9 +158,10 @@ export default function ArchivePage() {
                     >
                       <Trash2 size={16} />
                     </button>
-                  </li>
+                  </StaggerItem>
                 ))}
-              </ul>
+                </AnimatePresence>
+              </Stagger>
             )}
           </Card>
         </>

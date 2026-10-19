@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import devices, meetings
+from .routers import devices, meetings, presentations
 
 app = FastAPI(title="LUBB AI Hub", version="1.2.0")
 
@@ -15,6 +15,7 @@ app.add_middleware(
 
 app.include_router(meetings.router)
 app.include_router(devices.router)
+app.include_router(presentations.router)
 
 
 @app.get("/api/health")

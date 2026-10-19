@@ -13,7 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from .. import state
 from ..config import settings
-from ..models import FloorMode, Meeting, Utterance
+from ..models import FloorMode, Meeting, SlideRef, Utterance
 from ..realtime import manager
 from ..services import stt
 from ..store import store
@@ -27,6 +27,32 @@ log = logging.getLogger(__name__)
 def list_devices() -> list[dict]:
     """Connected buttons with their LED state and battery level."""
     return manager.snapshot()
+
+
+# Audio of the turn in progress, per device. Shared so the chair's panel can close a turn
+# (when it gives the floor to someone else) as well as the button itself.
+_turns: dict[str, tuple[bytearray, datetime]] = {}
+
+
+def finish_turn(device_id: str) -> None:
+    """Close the device's turn in progress, if any, and transcribe it."""
+    audio, started = _turns.pop(device_id, (None, None))
+    if audio:
+        _start_turn_task(device_id, bytes(audio), started)
+
+
+async def apply_floor(changes: dict[str, str]) -> None:
+    """Push floor changes to the buttons' LEDs and tell dashboards the new speaker/queue."""
+    await manager.set_leds(changes)
+    if changes and store.active:
+        await manager.broadcast(
+            {
+                "type": "floor",
+                "meeting_id": store.active.id,
+                "talking": list(state.floor.talking),
+                "queue": list(state.floor.queue),
+            }
+        )
 
 
 def _initial_led() -> str:
@@ -50,15 +76,13 @@ async def device_ws(ws: WebSocket, device_id: str) -> None:
     # A fresh connection is never mid-turn: drop any floor the old socket still held,
     # or the button would stay "talking" (and everyone else muted) forever.
     if state.floor.is_talking(device_id) or device_id in state.floor.queue:
-        await manager.set_leds(state.floor.release(device_id))
+        finish_turn(device_id)
+        await apply_floor(state.floor.drop(device_id))
     manager.devices[device_id] = ws
     manager.leds[device_id] = _initial_led()
     await manager.broadcast({"type": "device_connected", "device_id": device_id})
     await ws.send_json({"type": "led", "state": manager.leds[device_id]})
     await manager.broadcast({"type": "speaker_state", "device_id": device_id, "state": manager.leds[device_id]})
-
-    audio = bytearray()
-    turn_started: datetime | None = None
 
     try:
         while True:
@@ -67,9 +91,8 @@ async def device_ws(ws: WebSocket, device_id: str) -> None:
                 break
             if msg.get("bytes") is not None:
                 if settings.mics_enabled and state.floor.is_talking(device_id):
-                    # turn may start on button_down or when the queue hands us the floor
-                    turn_started = turn_started or datetime.now()
-                    audio.extend(msg["bytes"])
+                    # turn may start on button_down or when the queue / chair hands us the floor
+                    _turns.setdefault(device_id, (bytearray(), datetime.now()))[0].extend(msg["bytes"])
                 continue
 
             event = json.loads(msg["text"])
@@ -77,18 +100,15 @@ async def device_ws(ws: WebSocket, device_id: str) -> None:
 
             if kind == "button_down" and store.active and settings.mics_enabled:
                 changes = state.floor.request(device_id)
-                if changes.get(device_id) == "talking":
-                    audio.clear()
-                    turn_started = datetime.now()
-                await manager.set_leds(changes)
+                if changes.get(device_id) == "talking" or state.floor.is_talking(device_id):
+                    _turns[device_id] = (bytearray(), datetime.now())  # a new utterance starts
+                await apply_floor(changes)
 
             elif kind == "button_up":
-                was_talking = state.floor.is_talking(device_id)
-                await manager.set_leds(state.floor.release(device_id))
-                if was_talking and audio and turn_started:
-                    _start_turn_task(device_id, bytes(audio), turn_started)
-                audio.clear()
-                turn_started = None
+                # Audio only accumulates while the device had the floor, so whatever is buffered was
+                # spoken legitimately, even if the chair took the floor back mid-sentence.
+                finish_turn(device_id)
+                await apply_floor(state.floor.release(device_id))
 
             elif kind in ("hello", "battery"):
                 level = event.get("battery", event.get("level"))
@@ -98,12 +118,11 @@ async def device_ws(ws: WebSocket, device_id: str) -> None:
         pass
     finally:
         if manager.devices.get(device_id) is ws:  # not replaced by a newer connection
-            if state.floor.is_talking(device_id) and audio and turn_started:
-                _start_turn_task(device_id, bytes(audio), turn_started)  # keep what was said before the drop
+            finish_turn(device_id)  # keep what was said before the drop
             manager.devices.pop(device_id, None)
             manager.leds.pop(device_id, None)
             manager.battery.pop(device_id, None)
-            await manager.set_leds(state.floor.release(device_id))
+            await apply_floor(state.floor.drop(device_id))
             await manager.broadcast({"type": "device_disconnected", "device_id": device_id})
 
 
@@ -115,7 +134,9 @@ def _start_turn_task(device_id: str, pcm: bytes, started: datetime) -> None:
         return
     # Tag the turn with the item under discussion now, not when transcription finishes
     item = meeting.agenda_index if meeting.agenda_index < len(meeting.agenda) else None
-    task = asyncio.create_task(_finish_turn(meeting, participant.id, device_id, pcm, started, datetime.now(), item))
+    task = asyncio.create_task(
+        _finish_turn(meeting, participant.id, device_id, pcm, started, datetime.now(), item, meeting.now_showing)
+    )
     state.pending_turns.add(task)
     task.add_done_callback(state.pending_turns.discard)
 
@@ -128,6 +149,7 @@ async def _finish_turn(
     started: datetime,
     ended: datetime,
     agenda_index: int | None = None,
+    slide: SlideRef | None = None,
 ) -> None:
     # Whisper is CPU/GPU bound (or a network call when remote) — run it off the event loop
     try:
@@ -145,6 +167,7 @@ async def _finish_turn(
         text=text,
         language=lang,
         agenda_index=agenda_index,
+        slide=slide,
     )
     # Turns can finish transcribing out of order; keep the transcript in speaking order.
     bisect.insort(meeting.utterances, utterance, key=lambda u: u.started_at)

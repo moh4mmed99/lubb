@@ -1,6 +1,7 @@
 "use client";
 
 import { createInstance } from "i18next";
+import { MotionConfig } from "motion/react";
 import { useState } from "react";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import ar from "@/i18n/ar.json";
@@ -26,5 +27,10 @@ function createI18n(lang) {
 
 export function Providers({ lang, children }) {
   const [i18n] = useState(() => createI18n(lang));
-  return <I18nextProvider i18n={i18n}>{children}</I18nextProvider>;
+  return (
+    <I18nextProvider i18n={i18n}>
+      {/* "user": animations step aside when the OS asks for reduced motion */}
+      <MotionConfig reducedMotion="user">{children}</MotionConfig>
+    </I18nextProvider>
+  );
 }

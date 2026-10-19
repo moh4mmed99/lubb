@@ -7,7 +7,11 @@
     "setup": "New meeting",
     "history": "Archive",
     "theme": "Theme",
-    "kpis": "KPIs"
+    "kpis": "KPIs",
+    "stage": "Room screen",
+    "minutes": "Minutes",
+    "tasks": "Task follow-up",
+    "presentations": "Presentations"
   },
   "common": {
     "participants": "{{count}} participants",
@@ -58,12 +62,14 @@
     "floor": {
       "free": "Free",
       "one_at_a_time": "One speaker",
-      "queue": "Queue"
+      "queue": "Queue",
+      "chairman": "Chairman"
     },
     "floorHint": {
       "free": "Anyone can speak at any time.",
       "one_at_a_time": "Other buttons lock while someone is speaking.",
-      "queue": "The floor passes in the order people asked."
+      "queue": "The floor passes in the order people asked.",
+      "chairman": "Participants press their button to ask; the chair gives the floor from the screen."
     },
     "agenda": "Agenda",
     "agendaPh": "Add an item and press Enter",
@@ -119,7 +125,11 @@
     "agenda": "Agenda",
     "covered": "Discussed",
     "skipped": "Not discussed",
-    "contributions": "{{count}} contributions"
+    "contributions": "{{count}} contributions",
+    "exportWord": "Export Word",
+    "onSlide": "Slide {{n}}",
+    "presented": "Presentations shown",
+    "slidesShown": "{{count}} slides shown"
   },
   "history": {
     "title": "Archive",
@@ -169,5 +179,79 @@
       "open": "Open",
       "overdue": "Overdue"
     }
+  },
+  "stage": {
+    "open": "Room screen",
+    "floorOpen": "The floor is open",
+    "hint": "Hold a button to talk",
+    "next": "Next:",
+    "waiting": "Waiting for the meeting to start",
+    "fullscreen": "Full screen",
+    "exit": "Back to the dashboard",
+    "turn": "Speaking for"
+  },
+  "brand": {
+    "tagline": "Smart meeting system"
+  },
+  "chair": {
+    "title": "Floor control",
+    "subtitle": "Chair",
+    "hasFloor": "Has the floor",
+    "revoke": "Take back",
+    "nobody": "Nobody has the floor",
+    "requests": "Requests to speak ({{count}})",
+    "noRequests": "No requests. Participants press their button to ask.",
+    "grant": "Give floor",
+    "dismiss": "Dismiss"
+  },
+  "minutes": {
+    "title": "Minutes",
+    "subtitle": "Every meeting the AI summarised, ready to export",
+    "noneTitle": "No minutes yet",
+    "noneText": "When a meeting ends, the AI writes its minutes and they appear here.",
+    "search": "Search titles, summaries and decisions…",
+    "decisions": "{{count}} decisions",
+    "tasks": "{{count}} tasks",
+    "openTasks": "{{count}} open"
+  },
+  "tasks": {
+    "title": "Task follow-up",
+    "subtitle": "Every task from every meeting's minutes, in one place",
+    "noneTitle": "No tasks yet",
+    "noneText": "Tasks set in meeting minutes show up here to follow up.",
+    "search": "Search by task, owner or meeting…",
+    "filter": {
+      "open": "Open",
+      "overdue": "Overdue",
+      "done": "Done",
+      "all": "All"
+    },
+    "noOverdue": "Nothing overdue 👏",
+    "noDue": "No deadline",
+    "markDone": "Mark done",
+    "markOpen": "Reopen"
+  },
+  "decks": {
+    "title": "Presentations",
+    "subtitle": "PowerPoint files ready to show on the room screen",
+    "drop": "Drag and drop a presentation here",
+    "formats": "PowerPoint (pptx, ppt), Keynote, ODP or PDF — converted on the hub, offline",
+    "add": "Add presentation",
+    "noneTitle": "No presentations yet",
+    "noneText": "Add a PowerPoint file to show it in the meeting.",
+    "converting": "Preparing slides…",
+    "failed": "Couldn't convert this file",
+    "slides": "{{count}} slides",
+    "delete": "Delete presentation",
+    "deleteConfirm": "Delete “{{title}}”?",
+    "present": "Present full screen",
+    "exitPresent": "Exit presentation",
+    "prev": "Previous slide",
+    "next": "Next slide",
+    "slideOf": "Slide {{n}} of {{total}}",
+    "keysHint": "Use the arrow keys or space to move, or click the slide for the next one.",
+    "latest": "Latest",
+    "recording": "The meeting keeps recording:",
+    "notRecording": "No meeting is live — presenting without recording."
   }
 }

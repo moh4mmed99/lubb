@@ -18,6 +18,7 @@ class FloorMode(str, Enum):
     free = "free"
     one_at_a_time = "one_at_a_time"
     queue = "queue"
+    chairman = "chairman"  # buttons ask to speak; the chair gives the floor from the dashboard
 
 
 class MeetingStatus(str, Enum):
@@ -36,6 +37,18 @@ class Participant(BaseModel):
     photo: str | None = None  # small square JPEG as a data URL (resized in the browser)
 
 
+class SlideRef(BaseModel):
+    """A slide of a presentation shown on the room screen."""
+
+    presentation_id: str
+    title: str
+    slide: int
+
+
+class SlideShown(SlideRef):
+    at: datetime
+
+
 class Utterance(BaseModel):
     id: str = Field(default_factory=new_id)
     participant_id: str
@@ -44,6 +57,7 @@ class Utterance(BaseModel):
     text: str
     language: Language | None = None
     agenda_index: int | None = None  # agenda item being discussed when this was said
+    slide: SlideRef | None = None  # slide on screen when this was said, if presenting
 
 
 class Decision(BaseModel):
@@ -72,6 +86,8 @@ class Meeting(BaseModel):
     title: str
     agenda: list[str] = []
     agenda_index: int = 0  # current item; == len(agenda) once every item is done
+    now_showing: SlideRef | None = None  # slide on the room screen right now (presenting doesn't pause recording)
+    slides_shown: list[SlideShown] = []  # every slide change during the meeting, in order
     language: Language = Language.ar
     floor_mode: FloorMode = FloorMode.free
     status: MeetingStatus = MeetingStatus.scheduled
@@ -85,6 +101,10 @@ class Meeting(BaseModel):
 
 class AgendaMove(BaseModel):
     index: int
+
+
+class FloorMove(BaseModel):
+    device_id: str
 
 
 class MeetingCreate(BaseModel):

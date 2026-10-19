@@ -1,4 +1,4 @@
-# LUBB AI — لُبّ  · v1.2
+# LUBB AI — لُبّ  · v1.3
 
 Smart meeting system — نظام الاجتماعات الذكي
 
@@ -13,13 +13,48 @@ English is fully supported.
                                  └──── live events (WebSocket) ◄─────┘
                                  │                                   └─► LLM (Ollama) ─► minutes
                                  ▼
-                       Web app (Next.js) — dashboard, KPIs, setup, archive, minutes
+                       Web app (Next.js) — dashboard, KPIs, setup, archive, minutes, tasks, presentations
 ```
 
-Contents: [What's new in v1.2](#whats-new-in-v12) · [Getting started on Ubuntu](#getting-started-on-ubuntu) ·
+Contents: [What's new in v1.3](#whats-new-in-v13) · [v1.2](#whats-new-in-v12) · [Getting started on Ubuntu](#getting-started-on-ubuntu) ·
 [Getting started on macOS](#getting-started-on-macos) · [How it works](#how-it-works) ·
 [Running the AI](#running-the-ai) · [Configuration](#configuration) · [Project layout](#project-layout) ·
 [Working on the code](#working-on-the-code) · [Roadmap](#roadmap)
+
+---
+
+## What's new in v1.3
+
+**Meeting features**
+- **Agenda tracking:** the live page has an *Agenda* tab: the current item is highlighted, *Next item* moves on, and every turn is tagged with the item being discussed. The minutes show each item as *discussed / not discussed* with talk time, and the AI receives the transcript grouped by item.
+- **Chairman mode (`chairman`):** pressing a button asks to speak (amber, in a queue). The chair gives or takes back the floor from the live page's *Floor control* panel; the speaker keeps it across presses. The chair's own button speaks straight away when the floor is free. No firmware change — see the speaking modes below.
+- **Participant photos:** click (or drop an image on) a participant's circle in *New meeting*. Photos are cropped and shrunk in the browser (~10 KB) and saved with the meeting.
+- **Stats tab:** talk time, contributions and speakers, plus bars per participant and per agenda item, live during the meeting.
+- **Presenting doesn't pause recording:** while a deck is on screen, every turn is tagged with the slide shown, the meeting keeps a log of slides shown, and the AI sees `[On screen: …, slide N]` markers. The presenter rail shows *the meeting keeps recording*.
+
+**New pages (right-side menu)**
+- **KPIs:** computed from saved meetings — meetings this month, meeting hours, task completion, agenda coverage, meetings per month, task status.
+- **Minutes (المحاضر):** every meeting the AI summarised, with **PDF** (browser print) and **Word** (`.docx`, right-to-left, letterhead from `ORG_NAME`) export.
+- **Task follow-up (متابعة المهام):** every task from every meeting's minutes; overdue first; filter open / overdue / done; tick to complete.
+- **Presentations (العروض التقديمية):** upload PowerPoint / Keynote / ODP / PDF (up to 200 MB). The hub converts slides **locally** with LibreOffice + poppler — nothing leaves the room. Decks show as card stacks; presenting is a card deck where *next* drops the top card away. Full screen for the room monitor.
+
+**Archive & data**
+- **Delete history:** a trash icon per meeting and a *Delete history* button (the live meeting is kept). A meeting deleted while its minutes are being written no longer comes back.
+
+**Hub**
+- **Mic master switch `MICS_ENABLED`:** off = every button stays muted and audio is dropped.
+- **Local Whisper on the hub** (`STT_ENGINE=whisper`): tested on an NVIDIA DGX Spark (ARM); there the ready-made `faster-whisper` runs on the CPU, ~4 s for 5 s of speech.
+- **Fix:** two connections for the same button (or a reconnect mid-turn) could leave the floor held forever. The hub now releases it, and closes the replaced connection with code **4001** so it doesn't reconnect and fight back.
+- The browser button simulator was removed: testing now uses real buttons.
+
+**Look & feel**
+- **Framer Motion** (`motion`): sliding menu highlight and tab indicator, page entrances, spring press on buttons, lists that stagger in and glide when items leave. Respects *reduce motion*.
+- **Intentional asymmetry:** pages anchor to the sidebar edge; a short heavy rule under every page title; one featured item per page (first KPI, latest minutes, newest deck); unequal splits; side rails on the presenter and the minutes document.
+- **Softer corners**, **Lucide icons** in the menu and card headers, and a **text roll** on the لُبّ logo on hover (the whole word rolls; Arabic letters can't be split).
+- **Dark mode swaps the sidebar:** black sidebar beside a light page in light mode, light sidebar beside a black page in dark mode (`--rail` / `--rail-fg` tokens).
+- Tab title **لُبّ · LUBB**; the "hub is down" warning no longer flashes when switching pages.
+
+**Tests:** 24 backend tests (adds agenda, chairman mode, stuck-button reconnect, mic switch, delete history, Word export, presentations and presenting-while-recording).
 
 ---
 
@@ -68,6 +103,9 @@ Tested commands for Ubuntu 22.04 / 24.04. You need **Python 3.11+** and **Node.j
 sudo apt update
 sudo apt install -y git curl
 
+# Presentations: the hub converts slides locally
+sudo apt install -y libreoffice-impress poppler-utils
+
 # Python — Ubuntu 24.04 ships 3.12:
 sudo apt install -y python3 python3-venv python3-pip
 python3 --version                     # must be 3.11 or newer
@@ -97,7 +135,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest                      # should print: 11 passed
+python -m pytest                      # should print: 24 passed
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -167,6 +205,7 @@ the firmware.
 | `free` | Up to 2 people may talk at once (`max_concurrent`). |
 | `one_at_a_time` | One speaker; every other button turns red until the floor is free. |
 | `queue` | Others wait (amber); the floor passes in the order people pressed. |
+| `chairman` | Pressing asks to speak (amber, queued). The chair gives / takes back the floor from the dashboard; the speaker holds the button to talk and keeps the floor across presses. The chair's own button speaks at once when nobody has the floor. |
 
 ### REST API (`/api`)
 
@@ -179,6 +218,15 @@ the firmware.
 | `POST /meetings/{id}/report/generate` | Write the minutes again |
 | `PUT /meetings/{id}/report` | Save edited / approved minutes |
 | `GET /devices` | Connected buttons with LED state and battery |
+| `DELETE /meetings` | Delete history (every meeting except the live one) |
+| `POST /meetings/{id}/agenda` | Move the live meeting to agenda item `{index}` |
+| `GET /meetings/{id}/floor` | Who has the floor and who is waiting |
+| `POST /meetings/{id}/floor/grant` · `revoke` · `dismiss` | Chairman mode: give the floor to `{device_id}` · take it back · drop a request |
+| `GET /meetings/{id}/export/docx` | Minutes as a Word document |
+| `GET /presentations` · `POST /presentations?name=…` | List · upload (raw file body) |
+| `GET /presentations/{id}` · `DELETE /presentations/{id}` | One deck (status, slide count) · delete |
+| `GET /presentations/{id}/slides/{n}.png` | Slide image |
+| `POST /presentations/{id}/show` · `POST /presentations/stop` | Presenter is on slide `{slide}` (tags the live meeting) · closed the deck |
 
 Interactive docs: http://localhost:8000/docs.
 
@@ -192,6 +240,10 @@ Interactive docs: http://localhost:8000/docs.
   - `battery`
   - `meeting_started` / `meeting_ended`
   - `report_ready`
+  - `agenda` (current item changed)
+  - `floor` (chairman mode: speaker and queue)
+  - `slide` (slide on the room screen, or none)
+  - `presentation_ready` (a deck finished converting, or failed)
   - `error` (transcription failures)
 
   The web app's `useHub()` hook reconnects automatically, and pages reload their data whenever the connection comes back.
@@ -201,13 +253,16 @@ Interactive docs: http://localhost:8000/docs.
 Each meeting is stored as one JSON document in SQLite (`backend/data/lubb.db`, table `meetings`),
 using the Pydantic models in `backend/app/models.py`:
 
-- `Meeting`: title, agenda, language, floor_mode, status (`scheduled` / `live` / `ended`), participants, utterances, report, report_pending, timestamps
-- `Participant`: name, title, device_id, color, is_chair
-- `Utterance`: participant_id, start/end time, text, language
+- `Meeting`: title, agenda, agenda_index, language, floor_mode, status (`scheduled` / `live` / `ended`), participants, utterances, report, report_pending, now_showing, slides_shown, timestamps
+- `Participant`: name, title, device_id, color, is_chair, photo (small JPEG data URL)
+- `Utterance`: participant_id, start/end time, text, language, agenda_index, slide
 - `Report`: summary, decisions, tasks (text, owner_id, due_date, done), language, approved
 
 Storing a document per meeting means changing the model needs no database migration: add new
 fields with a default value. Delete `lubb.db` to start fresh.
+
+Presentations live next to the database, one folder each: `backend/data/presentations/<id>/`
+(`meta.json`, the original file, `slides/1.png…`).
 
 ---
 
@@ -270,8 +325,12 @@ All backend settings are environment variables (`backend/app/config.py`). Put th
 | `AI_TOKEN` | — | Sent as `Authorization: Bearer …` to remote AI servers |
 | `DB_PATH` | `data/lubb.db` | SQLite file, relative to where the hub starts |
 | `DEFAULT_LANGUAGE` | `ar` | Default meeting language |
+| `MICS_ENABLED` | `true` | Master switch for all buttons; `false` keeps them muted and drops audio |
+| `ORG_NAME` | — | Letterhead printed at the top of exported (Word) minutes |
 
 Frontend: `HUB_URL` (default `http://localhost:8000`) is where Next.js forwards `/api` and `/ws`.
+`next.config.mjs` raises `experimental.proxyClientMaxBodySize` to 250 MB: by default Next.js cuts
+forwarded uploads at 10 MB, which breaks large presentations.
 
 ---
 
@@ -288,28 +347,48 @@ backend/                     Python / FastAPI hub
   app/floor_control.py       Who may talk (free / one-at-a-time / queue), pure logic
   app/realtime.py            WebSocket registry: dashboards, devices, LED + battery state
   app/routers/devices.py     Button WebSocket: events in, LEDs out, audio → transcript
-  app/routers/meetings.py    Meeting REST API, minutes in the background, dashboard WebSocket
+  app/routers/meetings.py    Meeting REST API, agenda, chairman floor control, Word export, dashboard WebSocket
+  app/routers/presentations.py  Upload + local slide conversion, presenting (tags the live meeting)
   app/services/stt.py        Speech-to-text: stub / faster-whisper / remote
-  app/services/llm.py        Minutes: stub / Ollama (streamed), tolerant JSON parsing
+  app/services/llm.py        Minutes: stub / Ollama (streamed), tolerant JSON parsing; agenda + slide markers
+  app/services/export.py     Minutes → Word (.docx), right-to-left for Arabic
   tests/                     pytest (conftest.py points the DB at a temp file)
   .env.example               Template for remote-AI settings
 colab/
   lubb_ai_colab.ipynb        Notebook: Ollama + Whisper + Cloudflare tunnel on a Colab GPU
   server.py                  The GPU server the notebook runs
 frontend/                    Next.js 16 (App Router) + React 19 + Tailwind 4, plain JavaScript
-  app/layout.jsx             Root layout: font, language cookie → lang/dir, theme script
+  app/layout.jsx             Root layout: fonts, language cookie → lang/dir, theme script
+  app/globals.css            Design tokens (colours, soft corners, sidebar --rail colours that swap in dark mode)
   app/providers.jsx          i18next setup
   app/page.jsx               Live dashboard
+  app/stage/page.jsx         Room screen: full-screen view for the meeting-room monitor
+  app/kpis/page.jsx          KPIs across meetings
   app/setup/page.jsx         New meeting
   app/meetings/page.jsx      Archive + search
-  app/meetings/[id]/page.jsx Minutes: view, edit, approve, export, generate again, delete
-  components/                AppShell (navigation), ui (Card, Button, Badge…), StatusBadge, Logo
+  app/meetings/[id]/page.jsx Minutes: view, edit, approve, export (PDF/Word), generate again, delete; details rail
+  app/minutes/page.jsx       Every AI-summarised meeting, with PDF / Word export
+  app/tasks/page.jsx         Task follow-up across all meetings
+  app/presentations/page.jsx Presentation library (drop zone, card stacks)
+  app/presentations/[id]/page.jsx  Presenter: dropping card deck, side rail, full screen
+  components/AppShell.jsx    Navigation (sidebar, mobile bars); the room screen skips it
+  components/Brand.jsx       The لُبّ wordmark
+  components/RollingWordmark.jsx  The wordmark with the text roll on hover (sidebar)
+  components/ChairPanel.jsx  Chairman mode: speaker + queue, give / take back the floor
+  components/motion.jsx      Shared Framer Motion presets (ease, spring, Stagger / StaggerItem)
+  components/ui.jsx          Card, Button, Badge, Avatar, PageHeader…
+  components/MeetingStats.jsx, StatusBadge.jsx
   lib/api.js                 REST client + error messages
   lib/useHub.js              Live events WebSocket hook (auto-reconnect)
+  lib/useLiveMeeting.js      The live meeting + button states, shared by the dashboard and room screen
   lib/format.js              Dates, durations, speaking time, colours, button list
+  lib/kpis.js                KPI calculations
+  lib/image.js               Participant photo helper
   lib/theme.js               Light/dark toggle
   i18n/ar.json, en.json      Translations (Arabic is the default)
   next.config.mjs            Proxy to the hub, allowed dev origins for phones
+scripts/
+  mic_test.sh                Records 5 s from the mic in LUBB's audio format and plays it back
 ```
 
 ---
@@ -323,6 +402,9 @@ frontend/                    Next.js 16 (App Router) + React 19 + Tailwind 4, pl
 - **Pages are client components** (`"use client"`) that fetch from `/api` and listen to `useHub()`. Follow the same pattern: load on connect, update from events.
 - **Changing the data model:** edit `backend/app/models.py` and give new fields a default, so existing meetings in SQLite still load.
 - **Changing the button protocol:** update `docs/device-protocol.md` and `routers/devices.py` together, and tell the hardware team.
+- **Motion:** use the presets in `components/motion.jsx` (`spring`, `enter`, `Stagger` / `StaggerItem`) so everything moves the same way. `MotionConfig reducedMotion="user"` in `app/providers.jsx` respects *reduce motion*.
+- **Layout rules (intentional asymmetry):** anchor page containers to the start edge (`me-auto`, not `mx-auto`); `PageHeader` draws the short heavy rule; give each page one featured item; prefer unequal splits (≈7:4) and side rails over 50/50 grids.
+- **Arabic and motion:** never split Arabic words into per-letter animated pieces (the letters disconnect); animate whole words.
 - **`frontend/AGENTS.md`** is written automatically by `next dev` for AI coding tools. Leave it.
 - **Never commit** `backend/.env` (tokens), `backend/data/` (meeting recordings and text), `.venv/` or `node_modules/`. They are already git-ignored.
 
@@ -335,9 +417,14 @@ frontend/                    Next.js 16 (App Router) + React 19 + Tailwind 4, pl
 - [x] Minutes: review, edit, approve, export PDF
 - [x] Database (SQLite), meeting archive & search, speaking-time stats
 - [x] Remote GPU option (Google Colab)
-- [ ] Export minutes to Word
+- [x] Export minutes to Word
+- [x] Chairman mode (the chair grants/revokes the floor from the dashboard)
+- [x] Agenda tracking, participant photos, live stats, KPIs from real meetings
+- [x] Task follow-up across meetings
+- [x] Presentations: local conversion, card-deck presenter, slides tagged in the meeting
 - [ ] Rolling live summary during the meeting
-- [ ] Chairman mode (the chair grants/revokes the floor from the dashboard)
+- [ ] Room screen follows the presenter's slide (the hub already broadcasts `slide` events)
+- [ ] Whisper on the GPU on ARM hubs (DGX Spark) — needs a CUDA build of CTranslate2
 - [ ] Real button hardware (ESP32 or similar) speaking `docs/device-protocol.md`
 - [ ] User accounts / access control for the web app
 - [ ] Production deployment of the hub (systemd service, `npm run build && npm start`)

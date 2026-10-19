@@ -29,11 +29,14 @@ def _agenda(meeting: Meeting) -> str:
 def _transcript(meeting: Meeting) -> str:
     """Transcript grouped under agenda-item headings, so the minutes can follow the agenda."""
     names = {p.id: p.name for p in meeting.participants}
-    lines, item = [], None
+    lines, item, slide = [], None, None
     for u in meeting.utterances:
         if u.agenda_index is not None and u.agenda_index != item and u.agenda_index < len(meeting.agenda):
             item = u.agenda_index
             lines.append(f"\n## Agenda item {item + 1}: {meeting.agenda[item]}")
+        if u.slide and (u.slide.presentation_id, u.slide.slide) != slide:
+            slide = (u.slide.presentation_id, u.slide.slide)
+            lines.append(f"[On screen: \"{u.slide.title}\", slide {u.slide.slide}]")
         lines.append(f"[{u.started_at:%H:%M:%S}] {names.get(u.participant_id, '?')}: {u.text}")
     return "\n".join(lines)
 

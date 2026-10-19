@@ -1,7 +1,7 @@
 // Thin client for the hub's REST API (proxied to backend/ by next.config.mjs).
 // Shapes mirror backend/app/models.py.
 
-export class ApiError extends Error {
+class ApiError extends Error {
   constructor(message, status) {
     super(message);
     this.status = status;

@@ -16,11 +16,20 @@ class FloorController:
     max_concurrent: int = 2  # only used in free mode
     talking: list[str] = field(default_factory=list)
     queue: list[str] = field(default_factory=list)
+    chairs: set[str] = field(default_factory=set)  # the chair's button(s): may speak without asking
 
     def request(self, device_id: str) -> dict[str, str]:
         """Button pressed. Returns {device_id: led_state} for every device whose LED changes."""
         if device_id in self.talking or device_id in self.queue:
             return {}
+        if self.mode == FloorMode.chairman:
+            # Pressing asks to speak; only the chair hands out the floor (grant). The chair's own
+            # button speaks straight away when nobody else holds the floor.
+            if device_id in self.chairs and not self.talking:
+                self.talking.append(device_id)
+                return {device_id: TALKING}
+            self.queue.append(device_id)
+            return {device_id: WAITING}
         limit = self.max_concurrent if self.mode == FloorMode.free else 1
         if len(self.talking) < limit:
             self.talking.append(device_id)
@@ -35,6 +44,20 @@ class FloorController:
 
     def release(self, device_id: str) -> dict[str, str]:
         """Button released. Returns LED changes, possibly granting the floor to the next in queue."""
+        if self.mode == FloorMode.chairman:
+            return {}  # the floor (and a raised hand) stays until the chair changes it
+        return self.drop(device_id)
+
+    def drop(self, device_id: str) -> dict[str, str]:
+        """Device gone (disconnect/reconnect) or floor taken back: free whatever it held, in any mode."""
+        if self.mode == FloorMode.chairman:
+            if device_id in self.queue:
+                self.queue.remove(device_id)
+                return {device_id: READY}
+            if device_id in self.talking:
+                self.talking.remove(device_id)
+                return {device_id: READY}
+            return {}
         if device_id in self.queue:
             self.queue.remove(device_id)
             return {device_id: READY}
@@ -48,6 +71,20 @@ class FloorController:
             changes[nxt] = TALKING
         elif self.mode == FloorMode.one_at_a_time:
             changes = {"*": READY}
+        return changes
+
+    def grant(self, device_id: str) -> dict[str, str]:
+        """Chair gives the floor to one device; whoever had it goes back to ready."""
+        changes = {d: READY for d in self.talking if d != device_id}
+        if device_id in self.queue:
+            self.queue.remove(device_id)
+        self.talking = [device_id]
+        return changes | {device_id: TALKING}
+
+    def revoke(self) -> dict[str, str]:
+        """Chair takes the floor back from whoever has it."""
+        changes = {d: READY for d in self.talking}
+        self.talking = []
         return changes
 
     def is_talking(self, device_id: str) -> bool:

@@ -1,28 +1,52 @@
-// Small shared building blocks. Keep the look quiet: neutral surfaces, thin lines, one accent.
+"use client";
 
-export function Card({ className = "", children }) {
-  return <section className={`rounded-xl border border-line bg-card ${className}`}>{children}</section>;
+import { motion } from "motion/react";
+import { useId } from "react";
+import { spring } from "./motion";
+
+// Small shared building blocks. Flat and minimal: square boxes, hairlines, black for primary actions,
+// the green signal colour only for what is live or selected.
+
+export function Card({ className = "", interactive = false, children }) {
+  const classes = `overflow-hidden rounded-xl border border-line bg-card ${className}`;
+  if (!interactive) return <section className={classes}>{children}</section>;
+  // Clickable / glanceable cards lift on a spring
+  return (
+    <motion.section
+      className={classes}
+      whileHover={{ y: -3, boxShadow: "0 12px 28px -12px rgb(0 0 0 / 0.18)" }}
+      whileTap={{ y: -1, scale: 0.995 }}
+      transition={spring}
+    >
+      {children}
+    </motion.section>
+  );
 }
 
-export function CardHeader({ title, action }) {
+export function CardHeader({ title, action, icon: Icon }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
-      <h2 className="text-sm font-semibold">{title}</h2>
+      <h2 className="label flex items-center gap-2">
+        {Icon && <Icon size={15} strokeWidth={2} className="text-muted" />}
+        {title}
+      </h2>
       {action}
     </div>
   );
 }
 
 const variants = {
-  primary: "bg-fg text-bg hover:opacity-90",
-  ghost: "border border-line hover:bg-subtle",
-  danger: "border border-line text-danger hover:bg-subtle",
+  primary: "bg-fg text-bg hover:bg-signal hover:text-black",
+  ghost: "border border-fg/80 hover:bg-fg hover:text-bg",
+  danger: "border border-danger text-danger hover:bg-danger hover:text-white",
 };
 
 export function Button({ variant = "ghost", className = "", ...props }) {
   return (
-    <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:opacity-40 ${variants[variant]} ${className}`}
+    <motion.button
+      whileTap={props.disabled ? undefined : { scale: 0.96 }}
+      transition={spring}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40 ${variants[variant]} ${className}`}
       {...props}
     />
   );
@@ -32,7 +56,7 @@ const tones = { muted: "text-muted", ok: "text-ok", danger: "text-danger", accen
 
 export function Badge({ tone = "muted", pulse = false, children }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-xs ${tones[tone]}`}>
+    <span className={`label inline-flex items-center gap-1.5 rounded-full border border-current/40 px-2.5 py-0.5 ${tones[tone]}`}>
       <span className={`size-1.5 rounded-full bg-current ${pulse ? "animate-pulse" : ""}`} />
       {children}
     </span>
@@ -47,7 +71,7 @@ export function Avatar({ name, color, photo, size = "md", ring = false, dim = fa
       style={{
         backgroundColor: `${color}1f`,
         color,
-        boxShadow: ring ? `0 0 0 2px var(--card), 0 0 0 4px ${color}` : undefined,
+        boxShadow: ring ? `0 0 0 2px var(--card), 0 0 0 4px var(--signal)` : undefined,
       }}
     >
       {photo ? <img src={photo} alt={name} className="size-full object-cover" /> : name.slice(0, 1)}
@@ -71,31 +95,36 @@ export function VoiceBars({ color }) {
 }
 
 export function Segmented({ value, options, onChange }) {
+  const id = useId(); // each control gets its own sliding highlight
   return (
-    <div className="inline-flex flex-wrap rounded-lg bg-subtle p-1">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          onClick={() => onChange(o.value)}
-          className={`rounded-md px-3 py-1.5 text-sm transition ${
-            value === o.value ? "bg-card font-medium shadow-sm" : "text-muted hover:text-fg"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
+    <div className="inline-flex flex-wrap gap-0.5 rounded-lg border border-line p-0.5">
+      {options.map((o) => {
+        const active = value === o.value;
+        return (
+          <motion.button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            whileTap={{ scale: 0.95 }}
+            transition={spring}
+            className={`relative rounded-md px-3 py-1.5 text-sm transition-colors duration-200 ${active ? "font-medium text-bg" : "text-muted hover:text-fg"}`}
+          >
+            {active && <motion.span layoutId={`seg-${id}`} transition={spring} className="absolute inset-0 rounded-md bg-fg" />}
+            <span className="relative">{o.label}</span>
+          </motion.button>
+        );
+      })}
     </div>
   );
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none transition placeholder:text-muted focus:border-accent";
+  "w-full rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none transition placeholder:text-muted focus:border-fg";
 
 export function Field({ label, children }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-muted">{label}</span>
+      <span className="label text-muted">{label}</span>
       {children}
     </label>
   );
@@ -103,10 +132,12 @@ export function Field({ label, children }) {
 
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="flex flex-wrap items-end justify-between gap-4 pb-2">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+        {subtitle && <p className="label mb-2 text-muted">{subtitle}</p>}
+        <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">{title}</h1>
+        {/* Signature mark: a short heavy rule anchored to the start edge, not a full-width line */}
+        <span aria-hidden className="mt-5 block h-1.5 w-16 bg-fg" />
       </div>
       {actions && <div className="no-print flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -115,12 +146,17 @@ export function PageHeader({ title, subtitle, actions }) {
 
 /** A one-line message strip: errors, warnings, "the hub is offline". */
 export function Notice({ tone = "muted", children, action }) {
-  const border = { muted: "border-line", danger: "border-danger/40", warn: "border-warn/40", ok: "border-ok/40" }[tone];
+  const border = { muted: "border-line", danger: "border-danger", warn: "border-warn", ok: "border-ok" }[tone];
   return (
-    <div className={`no-print flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm ${border}`}>
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={spring}
+      className={`no-print flex flex-wrap items-center justify-between gap-3 rounded-lg border border-s-4 bg-card px-4 py-3 text-sm ${border}`}
+    >
       <span className={tones[tone] ?? ""}>{children}</span>
       {action}
-    </div>
+    </motion.div>
   );
 }
 
@@ -128,11 +164,11 @@ export function EmptyState({ icon: Icon, title, text, children }) {
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
       {Icon && (
-        <span className="grid size-12 place-items-center rounded-full bg-subtle text-muted">
+        <span className="grid size-12 place-items-center rounded-xl bg-fg text-bg">
           <Icon size={22} strokeWidth={1.5} />
         </span>
       )}
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <h2 className="text-xl font-semibold">{title}</h2>
       {text && <p className="max-w-sm text-sm text-muted">{text}</p>}
       {children && <div className="mt-2 flex flex-wrap justify-center gap-2">{children}</div>}
     </div>
