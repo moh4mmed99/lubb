@@ -98,7 +98,7 @@ export default function SetupPage() {
   };
 
   return (
-    <div className="me-auto max-w-6xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 page">
       <PageHeader
         title={t("setup.title")}
         subtitle={t("setup.subtitle")}
@@ -124,7 +124,7 @@ export default function SetupPage() {
       )}
       {error && <Notice tone="danger">{error}</Notice>}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <div className="fill grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Details */}
         <Card>
           <CardHeader icon={SlidersHorizontal} title={t("setup.details")} />

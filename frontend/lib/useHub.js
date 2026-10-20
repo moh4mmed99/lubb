@@ -7,41 +7,53 @@ function wsUrl(path) {
   return `${proto}://${location.host}${path}`;
 }
 
+// One connection to the hub for the whole app, opened on first use and kept open across pages.
+// (A socket per page meant every page switch waited for a new connection before loading anything.)
+const listeners = new Set(); // (event) => void
+const watchers = new Set(); // (connected) => void
+let socket = null;
+let status = null; // null until the first connection settles, then true / false
+
+function setStatus(next) {
+  status = next;
+  watchers.forEach((w) => w(next));
+}
+
+function open() {
+  socket = new WebSocket(wsUrl("/api/meetings/ws"));
+  socket.onopen = () => setStatus(true);
+  socket.onclose = () => {
+    socket = null;
+    setStatus(false);
+    setTimeout(open, 2000); // keep trying until the hub is back
+  };
+  socket.onmessage = (msg) => {
+    const event = JSON.parse(msg.data);
+    listeners.forEach((l) => l(event));
+  };
+}
+
 /**
  * Live events from the hub (see HubEvent in docs/device-protocol.md and backend/app/routers).
- * Calls onEvent for every event and reconnects automatically. Returns whether the hub is connected,
- * so callers can (re)load their data whenever the connection comes back:
- * null while the first connection is still opening, then true / false.
+ * Calls onEvent for every event. Returns whether the hub is connected, so callers can (re)load their
+ * data whenever the connection comes back: null while the first connection is still opening, then
+ * true / false. On a page switch the connection is already up, so it is true straight away.
  * Show "hub is down" only for `=== false`, or every page flashes it while it connects.
  */
 export function useHub(onEvent) {
-  const [connected, setConnected] = useState(null);
+  const [connected, setConnected] = useState(status);
   const handler = useRef(onEvent);
   handler.current = onEvent;
 
   useEffect(() => {
-    let ws;
-    let retry;
-    let closed = false;
-
-    const connect = () => {
-      ws = new WebSocket(wsUrl("/api/meetings/ws"));
-      ws.onopen = () => setConnected(true);
-      ws.onclose = () => {
-        // We closed it ourselves (page left, or React's dev double-mount): not an outage.
-        // Reporting it would flash "hub is down" on the next page while its own socket connects.
-        if (closed) return;
-        setConnected(false);
-        retry = setTimeout(connect, 2000);
-      };
-      ws.onmessage = (msg) => handler.current?.(JSON.parse(msg.data));
-    };
-    connect();
-
+    const listener = (event) => handler.current?.(event);
+    listeners.add(listener);
+    watchers.add(setConnected);
+    if (!socket && status !== false) open(); // status false = already retrying
+    setConnected(status);
     return () => {
-      closed = true;
-      clearTimeout(retry);
-      ws.close();
+      listeners.delete(listener);
+      watchers.delete(setConnected);
     };
   }, []);
 

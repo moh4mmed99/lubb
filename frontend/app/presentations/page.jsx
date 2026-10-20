@@ -1,14 +1,15 @@
 "use client";
 
 // Presentation library: drop a PowerPoint in, the hub turns it into slides, each deck shows as a card stack.
-import { AlertCircle, FileUp, Presentation, Trash2, UploadCloud } from "lucide-react";
+// With no decks yet the page is one big drop zone; once a file goes up it shrinks to a cloud beside the title.
+import { AlertCircle, FileUp, Trash2, UploadCloud } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { spring } from "@/components/motion";
-import { Button, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { Loading, Notice, PageHeader } from "@/components/ui";
+import { api, cached, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
 
@@ -37,9 +38,12 @@ function upload(file, onProgress) {
 
 export default function PresentationsPage() {
   const { t } = useTranslation();
-  const [decks, setDecks] = useState(null);
+  const [decks, setDecks] = useState(() => cached("/presentations") ?? null);
   const [error, setError] = useState(null);
   const [uploads, setUploads] = useState([]); // [{ key, name, progress }]
+  const [dragging, setDragging] = useState(false); // a file is being dragged over the page
+  const input = useRef(null);
+  const pick = () => input.current?.click();
 
   const load = useCallback(async () => {
     try {
@@ -79,29 +83,62 @@ export default function PresentationsPage() {
     }
   };
 
+  // Files can be dropped anywhere on the page, so the small cloud never has to be hit exactly
+  const dropTarget = {
+    onDragOver: (e) => {
+      if (!e.dataTransfer.types.includes("Files")) return;
+      e.preventDefault();
+      setDragging(true);
+    },
+    onDragLeave: (e) => !e.currentTarget.contains(e.relatedTarget) && setDragging(false),
+    onDrop: (e) => {
+      e.preventDefault();
+      setDragging(false);
+      addFiles([...e.dataTransfer.files]);
+    },
+  };
+
+  // Before the first deck, the drop zone is the page. Once a file is on its way it shrinks to the cloud
+  // beside the title (the same element, morphing: layoutId "upload").
+  const compact = (decks?.length ?? 0) > 0 || uploads.length > 0;
+
   return (
-    <div className="me-auto max-w-6xl space-y-10 p-4 md:p-8">
-      {/* Masthead split 7:4 — the title owns the wide column, the drop zone sits compact beside it */}
-      <div className="grid items-end gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,4fr)]">
-        <PageHeader title={t("decks.title")} subtitle={t("decks.subtitle")} />
-        <DropZone onFiles={addFiles} uploads={uploads} />
-      </div>
+    <div className="space-y-10 page" {...dropTarget}>
+      <PageHeader
+        title={t("decks.title")}
+        subtitle={t("decks.subtitle")}
+        actions={compact && <UploadCloudTile dragging={dragging} uploads={uploads} onPick={pick} />}
+      />
+      <input
+        ref={input}
+        type="file"
+        accept={ACCEPT}
+        multiple
+        className="sr-only"
+        onChange={(e) => {
+          addFiles([...e.target.files]);
+          e.target.value = "";
+        }}
+      />
       {error && (
         <Notice tone="danger" action={<button className="text-xs text-muted hover:text-fg" onClick={() => setError(null)}>✕</button>}>
           {error}
         </Notice>
       )}
 
-      {decks === null ? (
+      {decks === null && !compact ? (
         !error && <Loading />
-      ) : decks.length === 0 && uploads.length === 0 ? (
-        <EmptyState icon={Presentation} title={t("decks.noneTitle")} text={t("decks.noneText")} />
+      ) : !compact ? (
+        <DropZone className="fill" dragging={dragging} onPick={pick} />
       ) : (
         // Newest deck = focal point (2 columns × 2 rows); the next two stack beside it. Below that the
         // middle column drops one step, so the grid reads as a rhythm rather than a table.
         <div className="grid items-start gap-x-10 gap-y-14 pt-2 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence>
-            {decks.map((deck, i) => (
+            {uploads.map((u) => (
+              <UploadingCard key={u.key} upload={u} />
+            ))}
+            {(decks ?? []).map((deck, i) => (
               <DeckCard
                 key={deck.id}
                 deck={deck}
@@ -118,76 +155,127 @@ export default function PresentationsPage() {
   );
 }
 
-function DropZone({ onFiles, uploads }) {
+/** The empty library: one big glass drop zone filling the page. */
+function DropZone({ dragging, onPick, className = "" }) {
   const { t } = useTranslation();
-  const input = useRef(null);
-  const [over, setOver] = useState(false);
-
   return (
-    <motion.div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        onFiles([...e.dataTransfer.files]);
-      }}
-      onClick={() => input.current?.click()}
-      animate={{ scale: over ? 1.01 : 1 }}
+    <motion.button
+      type="button"
+      layoutId="upload"
       transition={spring}
-      className={`no-print flex cursor-pointer flex-col items-start gap-3 rounded-xl border-2 border-dashed p-5 text-start transition-colors ${
-        over ? "border-accent bg-accent/5" : "border-line bg-card hover:border-muted"
-      }`}
+      onClick={onPick}
+      className={`glass no-print flex flex-col items-center justify-center gap-5 rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
+        dragging ? "border-accent" : "hover:border-muted"
+      } ${className}`}
     >
-      <motion.span animate={{ y: over ? -4 : 0 }} transition={spring} className="grid size-12 place-items-center rounded-xl bg-fg text-bg">
-        <UploadCloud size={22} />
+      <motion.span
+        layoutId="upload-icon"
+        transition={spring}
+        animate={{ y: dragging ? -8 : 0 }}
+        className="grid size-20 place-items-center rounded-2xl bg-fg text-bg"
+      >
+        <UploadCloud size={34} strokeWidth={1.75} />
       </motion.span>
       <div>
-        <p className="font-medium">{t("decks.drop")}</p>
-        <p className="mt-1 text-xs text-muted">{t("decks.formats")}</p>
+        <p className="text-2xl font-semibold tracking-tight">{t("decks.drop")}</p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted">{t("decks.formats")}</p>
       </div>
-      <Button
-        variant="primary"
-        onClick={(e) => {
-          e.stopPropagation();
-          input.current?.click();
-        }}
-      >
+      {/* looks like the primary button; the whole zone is the button */}
+      <span className="inline-flex items-center gap-2 rounded-lg bg-fg px-4 py-2 text-sm font-medium text-bg">
         <FileUp size={16} />
         {t("decks.add")}
-      </Button>
-      <input
-        ref={input}
-        type="file"
-        accept={ACCEPT}
-        multiple
-        className="sr-only"
-        onChange={(e) => {
-          onFiles([...e.target.files]);
-          e.target.value = "";
-        }}
-      />
+      </span>
+    </motion.button>
+  );
+}
 
-      {uploads.length > 0 && (
-        <ul className="w-full max-w-sm space-y-2 text-start" onClick={(e) => e.stopPropagation()}>
-          {uploads.map((u) => (
-            <li key={u.key} className="text-xs">
-              <div className="flex justify-between gap-2">
-                <bdi className="truncate">{u.name}</bdi>
-                <span className="font-mono text-muted" dir="ltr">
-                  {Math.round(u.progress * 100)}%
-                </span>
-              </div>
-              <div className="mt-1 h-1 overflow-hidden rounded-full bg-subtle">
-                <motion.div className="h-full rounded-full bg-accent" animate={{ width: `${u.progress * 100}%` }} transition={{ ease: "easeOut" }} />
-              </div>
-            </li>
-          ))}
-        </ul>
+/** The drop zone shrunk to its cloud, beside the title. Rings with progress while files upload. */
+function UploadCloudTile({ dragging, uploads, onPick }) {
+  const { t } = useTranslation();
+  const busy = uploads.length > 0;
+  const progress = busy ? uploads.reduce((sum, u) => sum + u.progress, 0) / uploads.length : 0;
+  const r = 30;
+  const around = 2 * Math.PI * r;
+
+  return (
+    <motion.button
+      type="button"
+      layoutId="upload"
+      transition={spring}
+      onClick={onPick}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      aria-label={t("decks.add")}
+      title={t("decks.addHint")}
+      className={`glass no-print relative grid size-[4.5rem] place-items-center rounded-2xl border-2 border-dashed transition-colors ${
+        dragging ? "border-accent" : "hover:border-muted"
+      }`}
+    >
+      <motion.span layoutId="upload-icon" transition={spring} animate={{ y: dragging ? -6 : 0 }} className="grid size-12 place-items-center rounded-xl bg-fg text-bg">
+        {/* the cloud bobs while a file is going up (inside, so it never disturbs the shrink morph) */}
+        <motion.span
+          animate={{ y: busy ? [0, -3, 0] : 0 }}
+          transition={busy ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" } : spring}
+        >
+          <UploadCloud size={22} strokeWidth={1.75} />
+        </motion.span>
+      </motion.span>
+      {busy && (
+        <svg viewBox="0 0 72 72" className="pointer-events-none absolute -inset-[3px] size-[calc(100%+6px)] -rotate-90" aria-hidden>
+          <motion.circle
+            cx="36"
+            cy="36"
+            r={r}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={around}
+            animate={{ strokeDashoffset: around * (1 - progress) }}
+            transition={{ ease: "easeOut" }}
+          />
+        </svg>
       )}
+    </motion.button>
+  );
+}
+
+/** A file on its way up: a glass slide with its progress, until the hub has it and it becomes a deck. */
+function UploadingCard({ upload: u }) {
+  const { t } = useTranslation();
+  return (
+    <motion.div
+      layout
+      initial={{ y: -60, rotate: -3 }}
+      animate={{ y: 0, rotate: 0 }}
+      exit={{ scale: 0.95, transition: { duration: 0.2 } }}
+      transition={spring}
+    >
+      <div className="glass grid aspect-video place-items-center rounded-xl border">
+        <div className="w-2/3 space-y-4 text-center">
+          <motion.span
+            animate={{ y: [0, -5, 0] }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+            className="mx-auto grid size-10 place-items-center rounded-xl bg-fg text-bg"
+          >
+            <UploadCloud size={18} />
+          </motion.span>
+          <div className="h-1 overflow-hidden rounded-full bg-fg/10">
+            <motion.div className="h-full rounded-full bg-accent" animate={{ width: `${u.progress * 100}%` }} transition={{ ease: "easeOut" }} />
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 min-w-0">
+        <h2 className="truncate font-semibold">
+          <bdi>{u.name}</bdi>
+        </h2>
+        <p className="mt-0.5 text-xs text-muted">
+          {t("decks.uploading")} ·{" "}
+          <span className="font-mono" dir="ltr">
+            {Math.round(u.progress * 100)}%
+          </span>
+        </p>
+      </div>
     </motion.div>
   );
 }

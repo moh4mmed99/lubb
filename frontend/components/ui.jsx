@@ -2,18 +2,25 @@
 
 import { motion } from "motion/react";
 import { useId } from "react";
-import { spring } from "./motion";
+import { fadeIn, rise, spring } from "./motion";
 
-// Small shared building blocks. Flat and minimal: square boxes, hairlines, black for primary actions,
+// Small shared building blocks. Minimal: frosted-glass cards, hairlines, black for primary actions,
 // the green signal colour only for what is live or selected.
 
 export function Card({ className = "", interactive = false, children }) {
-  const classes = `overflow-hidden rounded-xl border border-line bg-card ${className}`;
-  if (!interactive) return <section className={classes}>{children}</section>;
+  const classes = `glass overflow-hidden rounded-xl border ${className}`;
+  // The card rises into place with the page (`rise`, via the page's variants). It never fades: see pageEnter.
+  if (!interactive)
+    return (
+      <motion.section className={classes} variants={rise}>
+        {children}
+      </motion.section>
+    );
   // Clickable / glanceable cards lift on a spring
   return (
     <motion.section
       className={classes}
+      variants={rise}
       whileHover={{ y: -3, boxShadow: "0 12px 28px -12px rgb(0 0 0 / 0.18)" }}
       whileTap={{ y: -1, scale: 0.995 }}
       transition={spring}
@@ -119,7 +126,7 @@ export function Segmented({ value, options, onChange }) {
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none transition placeholder:text-muted focus:border-fg";
+  "w-full rounded-lg border border-line bg-card/50 px-3 py-2 text-sm outline-none transition placeholder:text-muted focus:border-fg";
 
 export function Field({ label, children }) {
   return (
@@ -132,15 +139,16 @@ export function Field({ label, children }) {
 
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4 pb-2">
+    <motion.div variants={fadeIn} className="flex flex-wrap items-end justify-between gap-4 pb-2">
       <div className="min-w-0">
         {subtitle && <p className="label mb-2 text-muted">{subtitle}</p>}
-        <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">{title}</h1>
+        {/* -0.03em: the glyphs' built-in side space, trimmed so the letters (not their box) line up with the rule and cards */}
+        <h1 className="ms-[-0.03em] text-4xl font-semibold tracking-tight md:text-5xl">{title}</h1>
         {/* Signature mark: a short heavy rule anchored to the start edge, not a full-width line */}
         <span aria-hidden className="mt-5 block h-1.5 w-16 bg-fg" />
       </div>
       {actions && <div className="no-print flex flex-wrap items-center gap-2">{actions}</div>}
-    </div>
+    </motion.div>
   );
 }
 
@@ -149,10 +157,10 @@ export function Notice({ tone = "muted", children, action }) {
   const border = { muted: "border-line", danger: "border-danger", warn: "border-warn", ok: "border-ok" }[tone];
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ y: -6 }} // glass: slides in, never fades (see pageEnter in motion.jsx)
+      animate={{ y: 0 }}
       transition={spring}
-      className={`no-print flex flex-wrap items-center justify-between gap-3 rounded-lg border border-s-4 bg-card px-4 py-3 text-sm ${border}`}
+      className={`no-print flex flex-wrap items-center justify-between gap-3 glass rounded-lg border border-s-4 px-4 py-3 text-sm ${border}`}
     >
       <span className={tones[tone] ?? ""}>{children}</span>
       {action}
@@ -162,7 +170,7 @@ export function Notice({ tone = "muted", children, action }) {
 
 export function EmptyState({ icon: Icon, title, text, children }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
       {Icon && (
         <span className="grid size-12 place-items-center rounded-xl bg-fg text-bg">
           <Icon size={22} strokeWidth={1.5} />

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, errorText } from "@/lib/api";
+import { api, cached, errorText } from "@/lib/api";
 import { addUtterance } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
 
@@ -12,8 +12,12 @@ import { useHub } from "@/lib/useHub";
  */
 export function useLiveMeeting() {
   const { t } = useTranslation();
-  const [meeting, setMeeting] = useState(undefined); // undefined = loading, null = no live meeting
-  const [devices, setDevices] = useState({}); // device_id -> { state, battery }
+  // undefined = loading, null = no live meeting. Starts from the last data seen in this tab, if any.
+  const [meeting, setMeeting] = useState(() => {
+    const all = cached("/meetings");
+    return all ? (all.find((m) => m.status === "live") ?? null) : undefined;
+  });
+  const [devices, setDevices] = useState(() => Object.fromEntries((cached("/devices") ?? []).map((d) => [d.device_id, d]))); // device_id -> { state, battery }
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {

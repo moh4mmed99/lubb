@@ -8,7 +8,7 @@ import { AnimatePresence } from "motion/react";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button, Card, EmptyState, Loading, Notice, PageHeader, inputClass } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { api, cached, errorText } from "@/lib/api";
 import { duration, formatDate } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
 
@@ -24,7 +24,7 @@ function matches(meeting, query) {
 export default function ArchivePage() {
   const { t, i18n } = useTranslation();
   const lng = i18n.language;
-  const [meetings, setMeetings] = useState(null);
+  const [meetings, setMeetings] = useState(() => cached("/meetings") ?? null);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const Chevron = lng === "ar" ? ChevronLeft : ChevronRight;
@@ -79,7 +79,7 @@ export default function ArchivePage() {
   const deletable = meetings?.some((m) => m.status !== "live");
 
   return (
-    <div className="me-auto max-w-4xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 page">
       <PageHeader
         title={t("history.title")}
         subtitle={t("history.subtitle")}
@@ -96,7 +96,7 @@ export default function ArchivePage() {
       {meetings === null ? (
         !error && <Loading />
       ) : meetings.length === 0 ? (
-        <Card>
+        <Card className="fill flex flex-col">
           <EmptyState icon={Archive} title={t("history.noneTitle")} text={t("history.noneText")}>
             <Link href="/setup">
               <Button variant="primary">
@@ -113,7 +113,7 @@ export default function ArchivePage() {
             <input className={`${inputClass} ps-9`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("history.search")} />
           </div>
 
-          <Card>
+          <Card className="fill">
             {results.length === 0 ? (
               <p className="p-10 text-center text-sm text-muted">{t("history.empty")}</p>
             ) : (

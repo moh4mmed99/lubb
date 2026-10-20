@@ -8,22 +8,23 @@ import { useTranslation } from "react-i18next";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button, Card, EmptyState, Loading, Notice, PageHeader, inputClass } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { api, cached, errorText } from "@/lib/api";
 import { duration, formatDate } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
+
+// Only finished meetings: those with minutes, or whose minutes are being written right now
+const withMinutes = (all) => all?.filter((m) => m.status === "ended" && (m.report || m.report_pending)) ?? null;
 
 export default function MinutesListPage() {
   const { t, i18n } = useTranslation();
   const lng = i18n.language;
-  const [meetings, setMeetings] = useState(null);
+  const [meetings, setMeetings] = useState(() => withMinutes(cached("/meetings")));
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const all = await api("/meetings");
-      // Only finished meetings: those with minutes, or whose minutes are being written right now
-      setMeetings(all.filter((m) => m.status === "ended" && (m.report || m.report_pending)));
+      setMeetings(withMinutes(await api("/meetings")));
       setError(null);
     } catch (err) {
       setError(errorText(err, t));
@@ -43,14 +44,14 @@ export default function MinutesListPage() {
   );
 
   return (
-    <div className="me-auto max-w-5xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 page">
       <PageHeader title={t("minutes.title")} subtitle={t("minutes.subtitle")} />
       {error && <Notice tone="danger">{error}</Notice>}
 
       {meetings === null ? (
         !error && <Loading />
       ) : meetings.length === 0 ? (
-        <Card>
+        <Card className="fill flex flex-col">
           <EmptyState icon={ScrollText} title={t("minutes.noneTitle")} text={t("minutes.noneText")} />
         </Card>
       ) : (
@@ -64,9 +65,9 @@ export default function MinutesListPage() {
             <p className="py-10 text-center text-sm text-muted">{t("history.empty")}</p>
           ) : (
             // The latest minutes lead at full width; older ones fall into two columns beneath
-            <Stagger className="grid gap-4 md:grid-cols-2">
+            <Stagger className="fill grid gap-4 md:grid-cols-2">
               {results.map((m, i) => (
-                <StaggerItem key={m.id} className={i === 0 ? "md:col-span-2" : ""}>
+                <StaggerItem card key={m.id} className={i === 0 ? "md:col-span-2" : ""}>
                   <MinutesCard meeting={m} lng={lng} featured={i === 0} />
                 </StaggerItem>
               ))}

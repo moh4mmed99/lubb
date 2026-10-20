@@ -21,7 +21,8 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/lib/theme";
 import { RollingWordmark } from "./RollingWordmark";
-import { enter, spring } from "./motion";
+import { WaveBackdrop } from "./WaveBackdrop";
+import { pageEnter, spring } from "./motion";
 
 const nav = [
   { href: "/", key: "live", icon: Radio },
@@ -59,7 +60,9 @@ export function AppShell({ children }) {
   return (
     <div className="flex h-full flex-col md:flex-row">
       {/* Desktop sidebar: the inverse of the page (black in light mode, light in dark mode), one row per section */}
-      <aside className="no-print hidden w-60 shrink-0 flex-col bg-rail px-5 py-6 text-rail-fg md:flex">
+      <aside className="no-print hidden w-60 shrink-0 flex-col bg-rail px-5 pt-[calc(var(--gutter-y)+1.05rem)] pb-6 text-rail-fg md:flex">
+        {/* top margin = the page gutter plus the wordmark's own overhang (its marks rise above its box), so the
+            wordmark's ink sits level with the first line of every page */}
         {/* only the name rolls on hover; its rolling box ends above the tagline, so the tagline stays still and untouched */}
         <Link href="/" className="group/brand mb-2" aria-label="لُبّ">
           <RollingWordmark size="md" />
@@ -100,7 +103,7 @@ export function AppShell({ children }) {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="no-print flex items-center justify-between bg-rail px-4 py-1 text-rail-fg md:hidden">
+      <header className="no-print flex items-center justify-between bg-rail px-[var(--gutter-x)] pt-3 pb-1 text-rail-fg md:hidden">
         <Link href="/" aria-label="لُبّ" className="group/brand">
           <RollingWordmark size="sm" />
         </Link>
@@ -108,8 +111,9 @@ export function AppShell({ children }) {
       </header>
 
       <main className="min-w-0 flex-1 overflow-y-auto pb-14 md:pb-0">
-        {/* keyed by path, so every page plays its entrance */}
-        <motion.div key={pathname} {...enter}>
+        <WaveBackdrop />
+        {/* keyed by path, so every page plays its entrance; relative z-10 keeps it in front of the wave */}
+        <motion.div key={pathname} {...pageEnter} className="relative z-10 flex min-h-full flex-col">
           {children}
         </motion.div>
       </main>

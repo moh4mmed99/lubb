@@ -2,7 +2,7 @@
 
 /* Design tokens — light by default, dark via data-theme on <html> (see lib/theme.js).
    Minimal, flat palette: grey ground, white or black boxes, one green signal colour.
-   No gradients, no shadows, square corners. */
+   Cards are frosted glass (.glass) over the moving background. */
 :root {
   --bg: #e4e4e2;
   --card: #ffffff;
@@ -19,6 +19,9 @@
   /* Side rail (navigation): the inverse of the page — black beside a light page… */
   --rail: #000000;
   --rail-fg: #ffffff;
+  --glass: rgb(255 255 255 / 0.55);
+  --glass-edge: rgb(255 255 255 / 0.75);
+  --glass-shadow: 0 10px 40px -16px rgb(20 20 40 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.7);
   color-scheme: light;
 }
 
@@ -38,6 +41,10 @@
   /* …and the page's light grey beside a black page, so the two always contrast */
   --rail: #e4e4e2;
   --rail-fg: #0b0b0b;
+  /* on black a dark pane vanishes, so dark glass is a light smoke: brighter at the top, fading downward */
+  --glass: linear-gradient(160deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.04) 55%, rgb(255 255 255 / 0.06));
+  --glass-edge: rgb(255 255 255 / 0.17);
+  --glass-shadow: 0 16px 48px -18px rgb(0 0 0 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.16);
   color-scheme: dark;
 }
 
@@ -75,6 +82,41 @@
 html,
 body {
   height: 100%;
+}
+
+/* Outer margins: one gutter for every page, growing with the screen (16px on a phone, ~56px on wide monitors).
+   The sidebar uses the same top margin, so a page's first line sits level with the wordmark. */
+:root {
+  --gutter-x: clamp(1rem, 2.4vw + 0.25rem, 3.5rem);
+  --gutter-y: clamp(1.25rem, 1.6vw + 0.5rem, 2.75rem);
+}
+@layer components {
+  .page {
+    padding: var(--gutter-y) var(--gutter-x);
+    /* fills the main area below the sidebar's top; the block marked .fill takes whatever height is left,
+       so the cards reach the bottom margin while the section title keeps its natural height */
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .page > .fill {
+    flex-grow: 1;
+  }
+
+  /* Glass: cards are frosted panes over the moving background. A translucent fill, a strong blur that
+     keeps text readable, a bright hairline edge and a soft lift. */
+  .glass {
+    background: var(--glass);
+    border-color: var(--glass-edge);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(16px) saturate(1.5);
+  }
+}
+
+/* Everything is sized in rem, so scaling the root scales the whole interface with the screen:
+   16px up to ~1440px wide, growing smoothly to 20px on very wide monitors. */
+html {
+  font-size: clamp(16px, 0.73vw + 5.5px, 20px);
 }
 
 body {

@@ -8,6 +8,12 @@ class ApiError extends Error {
   }
 }
 
+// Last answer to every GET, so a page you come back to shows its data at once (then refreshes it)
+// instead of a spinner. Lives only in the browser tab.
+const lastSeen = new Map();
+/** The last data fetched from `path` in this tab, or undefined. */
+export const cached = (path) => lastSeen.get(path);
+
 export async function api(path, { method = "GET", body } = {}) {
   let res;
   try {
@@ -30,7 +36,9 @@ export async function api(path, { method = "GET", body } = {}) {
     if (Array.isArray(detail)) detail = detail.map((d) => d.msg).join(", ");
     throw new ApiError(typeof detail === "string" ? detail : res.status >= 500 ? "hub_unreachable" : res.statusText, res.status);
   }
-  return res.status === 204 ? null : res.json();
+  const data = res.status === 204 ? null : await res.json();
+  if (method === "GET") lastSeen.set(path, data);
+  return data;
 }
 
 /** Error text for the UI: translates the "hub is down" case, shows the hub's own message otherwise. */

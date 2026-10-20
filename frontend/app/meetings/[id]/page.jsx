@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, inputClass } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { api, cached, errorText } from "@/lib/api";
 import { duration, elapsed, formatDate, mmss, speakingTime } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
 
@@ -18,7 +18,7 @@ export default function MinutesPage() {
   const { t, i18n } = useTranslation();
   const lng = i18n.language;
   const router = useRouter();
-  const [meeting, setMeeting] = useState(undefined); // undefined = loading, null = not found
+  const [meeting, setMeeting] = useState(() => cached(`/meetings/${id}`)); // undefined = loading, null = not found
   const [error, setError] = useState(null);
   const [draft, setDraft] = useState(null); // report being edited
   const [busy, setBusy] = useState(false);
@@ -96,12 +96,12 @@ export default function MinutesPage() {
   };
 
   if (meeting === undefined) {
-    return <div className="me-auto max-w-3xl space-y-4 p-4 md:p-8">{error ? <Notice tone="danger">{error}</Notice> : <Loading />}</div>;
+    return <div className="space-y-4 page">{error ? <Notice tone="danger">{error}</Notice> : <Loading />}</div>;
   }
   if (meeting === null) {
     return (
-      <div className="me-auto max-w-3xl p-4 md:p-8">
-        <Card>
+      <div className="page">
+        <Card className="fill flex flex-col">
           <EmptyState icon={FileQuestion} title={t("report.notFound")}>
             <Link href="/meetings">
               <Button>{t("nav.history")}</Button>
@@ -117,7 +117,7 @@ export default function MinutesPage() {
   const shown = draft ?? report;
 
   return (
-    <div className="me-auto max-w-5xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 page">
       {/* Toolbar */}
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
         <StatusBadge meeting={meeting} />
@@ -185,8 +185,8 @@ export default function MinutesPage() {
       )}
 
       {/* Document in the wide column, details in a narrow rail beside it (on wide screens) */}
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
-      <Card className="p-6 md:p-10">
+      <div className="fill grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
+      <Card className="self-stretch p-6 md:p-10">
         {/* Title block */}
         <p className="text-xs font-medium uppercase tracking-wider text-muted">{t("report.label")}</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">

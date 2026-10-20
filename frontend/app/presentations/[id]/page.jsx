@@ -80,7 +80,7 @@ export default function PresenterPage() {
   }, []);
   const toggleFull = () => (document.fullscreenElement ? document.exitFullscreen() : stage.current?.requestFullscreen?.());
 
-  if (error) return <div className="me-auto max-w-3xl p-4 md:p-8"><Notice tone="danger">{error}</Notice></div>;
+  if (error) return <div className="page"><Notice tone="danger">{error}</Notice></div>;
   if (!deck) return <Loading />;
 
   const visible = Array.from({ length: BEHIND + 1 }, (_, i) => n + i).filter((s) => s <= deck.slides);
@@ -132,7 +132,7 @@ export default function PresenterPage() {
 
   return (
     // overflow-clip: a card falling off the bottom (or tilting past the sides) must not make the page scroll
-    <div ref={stage} className={`min-h-full overflow-clip p-4 md:p-8 ${full ? "flex flex-col items-center justify-center gap-8 bg-black text-white" : ""}`}>
+    <div ref={stage} className={`min-h-full overflow-clip page ${full ? "flex flex-col items-center justify-center gap-8 bg-black text-white" : ""}`}>
       {full ? (
         <>
           <div className="w-full max-w-[min(92vw,calc(82vh*16/9))]">{stack}</div>

@@ -6,14 +6,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Button, Card, CardHeader, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { api, cached, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { computeKpis } from "@/lib/kpis";
 import { useHub } from "@/lib/useHub";
 
 export default function KpisPage() {
   const { t } = useTranslation();
-  const [meetings, setMeetings] = useState(null);
+  const [meetings, setMeetings] = useState(() => cached("/meetings") ?? null);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
@@ -38,7 +38,7 @@ export default function KpisPage() {
   const kpis = meetings && computeKpis(meetings);
 
   return (
-    <div className="me-auto max-w-6xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 page">
       <PageHeader
         title={t("kpi.title")}
         subtitle={t("kpi.subtitle")}
@@ -56,7 +56,7 @@ export default function KpisPage() {
       {!kpis ? (
         !error && <Loading />
       ) : kpis.total === 0 ? (
-        <Card>
+        <Card className="fill flex flex-col">
           <EmptyState icon={BarChart3} title={t("kpi.noneTitle")} text={t("kpi.noneText")}>
             <Link href="/setup">
               <Button variant="primary">
@@ -71,12 +71,12 @@ export default function KpisPage() {
           {/* 5-column grid: the headline KPI (meetings) takes two columns, the other three one each */}
           <Stagger className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             {kpis.tiles.map((k, i) => (
-              <StaggerItem key={k.key} className={i === 0 ? "col-span-2" : ""}>
+              <StaggerItem card key={k.key} className={i === 0 ? "col-span-2" : ""}>
                 <StatTile kpi={k} featured={i === 0} />
               </StaggerItem>
             ))}
           </Stagger>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="fill grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <MeetingsColumns data={kpis.perMonth} />
             <TaskStatus data={kpis.taskStatus} />
           </div>

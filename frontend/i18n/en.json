@@ -252,6 +252,8 @@
     "keysHint": "Use the arrow keys or space to move, or click the slide for the next one.",
     "latest": "Latest",
     "recording": "The meeting keeps recording:",
-    "notRecording": "No meeting is live — presenting without recording."
+    "notRecording": "No meeting is live — presenting without recording.",
+    "uploading": "Uploading",
+    "addHint": "Add a presentation — or drop it anywhere on this page"
   }
 }

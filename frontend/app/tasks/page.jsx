@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Stagger, StaggerItem, spring } from "@/components/motion";
 import { Avatar, Card, EmptyState, Loading, Notice, PageHeader, Segmented, inputClass } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { api, cached, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
 
@@ -24,9 +24,11 @@ const RANK = { overdue: 0, open: 1, done: 2 };
 const byUrgency = (a, b) =>
   RANK[a.status] - RANK[b.status] || (a.task.due_date ?? "9999").localeCompare(b.task.due_date ?? "9999");
 
+const withTasks = (all) => all?.filter((m) => m.report?.tasks.length) ?? null;
+
 export default function TasksPage() {
   const { t, i18n } = useTranslation();
-  const [meetings, setMeetings] = useState(null);
+  const [meetings, setMeetings] = useState(() => withTasks(cached("/meetings")));
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("open");
   const [query, setQuery] = useState("");
@@ -34,7 +36,7 @@ export default function TasksPage() {
 
   const load = useCallback(async () => {
     try {
-      setMeetings((await api("/meetings")).filter((m) => m.report?.tasks.length));
+      setMeetings(withTasks(await api("/meetings")));
       setError(null);
     } catch (err) {
       setError(errorText(err, t));
@@ -80,14 +82,14 @@ export default function TasksPage() {
   );
 
   return (
-    <div className="me-auto max-w-5xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 page">
       <PageHeader title={t("tasks.title")} subtitle={t("tasks.subtitle")} />
       {error && <Notice tone="danger">{error}</Notice>}
 
       {meetings === null ? (
         !error && <Loading />
       ) : rows.length === 0 ? (
-        <Card>
+        <Card className="fill flex flex-col">
           <EmptyState icon={ListTodo} title={t("tasks.noneTitle")} text={t("tasks.noneText")} />
         </Card>
       ) : (
@@ -110,7 +112,7 @@ export default function TasksPage() {
             </div>
           </div>
 
-          <Card>
+          <Card className="fill">
             {shown.length === 0 ? (
               <p className="p-10 text-center text-sm text-muted">{filter === "overdue" ? t("tasks.noOverdue") : t("history.empty")}</p>
             ) : (

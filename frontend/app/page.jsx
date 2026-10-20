@@ -45,15 +45,15 @@ export default function LiveMeetingPage() {
   const offline = !connected && <Notice tone="danger">{t("common.hubDown")}</Notice>;
 
   if (meeting === undefined) {
-    return <div className="me-auto max-w-7xl space-y-4 p-4 md:p-8">{offline || <Loading />}</div>;
+    return <div className="space-y-4 page">{offline || <Loading />}</div>;
   }
 
   if (meeting === null) {
     return (
-      <div className="me-auto max-w-3xl space-y-4 p-4 md:p-8">
+      <div className="space-y-4 page">
         {offline}
         {error && <Notice tone="danger">{error}</Notice>}
-        <Card>
+        <Card className="fill flex flex-col">
           <EmptyState icon={Mic} title={t("live.noneTitle")} text={t("live.noneText")}>
             <Link href="/setup">
               <Button variant="primary">
@@ -76,7 +76,7 @@ export default function LiveMeetingPage() {
   const speaking = meeting.participants.find((p) => stateOf(p) === "talking");
 
   return (
-    <div className="me-auto flex max-w-7xl flex-col gap-5 p-4 md:p-8 lg:h-full">
+    <div className="flex flex-col gap-5 page lg:h-full">
       {offline}
       {error && (
         <Notice tone="danger" action={<button className="text-xs text-muted hover:text-fg" onClick={() => setError(null)}>✕</button>}>
@@ -134,7 +134,7 @@ export default function LiveMeetingPage() {
             <div
               key={p.id}
               className={`flex items-center gap-2.5 border py-1.5 ps-1.5 pe-4 transition-colors ${
-                talking ? "border-signal bg-signal text-black" : "border-line bg-card"
+                talking ? "border-signal bg-signal text-black" : "glass"
               }`}
               title={p.device_id ? `${p.device_id}${battery != null ? ` · ${battery}%` : ""}` : undefined}
             >
