@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Response, WebSocket, WebSocketDisc
 
 from .. import state
 from ..floor_control import FloorController
-from ..models import AgendaMove, FloorMode, FloorMove, Language, Meeting, MeetingCreate, MeetingStatus, Report
+from ..models import AgendaMove, FloorMode, FloorMove, Language, ManualMinutes, Meeting, MeetingCreate, MeetingStatus, Report
 from ..realtime import manager
 from ..services import export, llm
 from ..store import store
@@ -38,6 +38,25 @@ def create_meeting(body: MeetingCreate) -> Meeting:
     if len(devices) != len(set(devices)):
         raise HTTPException(422, "Each button can belong to one participant only")
     return store.add(Meeting(**body.model_dump()))
+
+
+@router.post("/manual")
+def create_manual_minutes(body: ManualMinutes) -> Meeting:
+    """Records a meeting held without LUBB as already ended, with empty minutes to fill in by hand."""
+    if not body.title.strip():
+        raise HTTPException(422, "Title is required")
+    if body.ended_at < body.started_at:
+        raise HTTPException(422, "The meeting can't end before it starts")
+    meeting = Meeting(
+        **body.model_dump(exclude={"participants", "agenda"}),
+        agenda=[a.strip() for a in body.agenda if a.strip()],
+        participants=[p for p in body.participants if p.name.strip()],
+        agenda_index=len([a for a in body.agenda if a.strip()]),  # nothing left to discuss
+        status=MeetingStatus.ended,
+        manual=True,
+        report=Report(language=body.language),
+    )
+    return store.add(meeting)
 
 
 @router.delete("", status_code=200)
@@ -161,6 +180,8 @@ def regenerate_report(meeting_id: str, language: Language | None = None) -> Meet
     meeting = _get(meeting_id)
     if meeting.status != MeetingStatus.ended:
         raise HTTPException(409, "The meeting has not ended yet")
+    if meeting.manual:  # nothing was recorded, so the AI would overwrite them with empty minutes
+        raise HTTPException(409, "These minutes were written by hand; there is no recording to summarise")
     if not meeting.report_pending:
         _generate_in_background(meeting, language)
     return meeting

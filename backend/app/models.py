@@ -95,6 +95,7 @@ class Meeting(BaseModel):
     utterances: list[Utterance] = []
     report: Report | None = None
     report_pending: bool = False  # minutes are being generated
+    manual: bool = False  # minutes typed in by hand for a meeting that wasn't recorded (no transcript)
     started_at: datetime | None = None
     ended_at: datetime | None = None
 
@@ -105,6 +106,17 @@ class AgendaMove(BaseModel):
 
 class FloorMove(BaseModel):
     device_id: str
+
+
+class ManualMinutes(BaseModel):
+    """A meeting that happened without LUBB: its details, so its minutes can be written by hand."""
+
+    title: str
+    started_at: datetime
+    ended_at: datetime
+    language: Language = Language.ar
+    agenda: list[str] = []
+    participants: list[Participant] = []
 
 
 class MeetingCreate(BaseModel):

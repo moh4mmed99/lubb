@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChairPanel } from "@/components/ChairPanel";
 import { MeetingStats } from "@/components/MeetingStats";
+import { SpeakerSpotlight } from "@/components/SpeakerSpotlight";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, Segmented, VoiceBars } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { elapsed, formatDate } from "@/lib/format";
@@ -156,6 +157,9 @@ export default function LiveMeetingPage() {
         <Transcript meeting={meeting} speaking={speaking} />
         <SidePanel meeting={meeting} onMoveAgenda={moveAgenda} />
       </div>
+
+      {/* whoever is speaking pops up in the corner with their photo */}
+      <SpeakerSpotlight speakers={meeting.participants.filter((p) => stateOf(p) === "talking")} />
     </div>
   );
 }

@@ -6,6 +6,8 @@ import {
   ArrowRight,
   BarChart3,
   Languages,
+  LayoutDashboard,
+  LifeBuoy,
   ListTodo,
   Moon,
   MonitorPlay,
@@ -25,6 +27,7 @@ import { WaveBackdrop } from "./WaveBackdrop";
 import { pageEnter, spring } from "./motion";
 
 const nav = [
+  { href: "/overview", key: "overview", icon: LayoutDashboard },
   { href: "/", key: "live", icon: Radio },
   { href: "/kpis", key: "kpis", icon: BarChart3 },
   { href: "/setup", key: "setup", icon: PlusCircle },
@@ -33,6 +36,7 @@ const nav = [
   { href: "/tasks", key: "tasks", icon: ListTodo },
   { href: "/presentations", key: "presentations", icon: Presentation },
   { href: "/stage", key: "stage", icon: MonitorPlay },
+  { href: "/help", key: "help", icon: LifeBuoy },
 ];
 
 export function AppShell({ children }) {

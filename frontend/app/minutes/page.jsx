@@ -1,13 +1,13 @@
 "use client";
 
 // Every meeting the AI has written minutes for, with one-click PDF / Word export.
-import { FileText, Printer, ScrollText, Search, Sparkles } from "lucide-react";
+import { FilePlus2, FileText, PenLine, Printer, ScrollText, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Button, Card, EmptyState, Loading, Notice, PageHeader, inputClass } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Loading, Notice, PageHeader, inputClass } from "@/components/ui";
 import { api, cached, errorText } from "@/lib/api";
 import { duration, formatDate } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
@@ -45,14 +45,32 @@ export default function MinutesListPage() {
 
   return (
     <div className="space-y-6 page">
-      <PageHeader title={t("minutes.title")} subtitle={t("minutes.subtitle")} />
+      <PageHeader
+        title={t("minutes.title")}
+        subtitle={t("minutes.subtitle")}
+        actions={
+          <Link href="/minutes/new">
+            <Button>
+              <FilePlus2 size={16} />
+              {t("minutes.add")}
+            </Button>
+          </Link>
+        }
+      />
       {error && <Notice tone="danger">{error}</Notice>}
 
       {meetings === null ? (
         !error && <Loading />
       ) : meetings.length === 0 ? (
         <Card className="fill flex flex-col">
-          <EmptyState icon={ScrollText} title={t("minutes.noneTitle")} text={t("minutes.noneText")} />
+          <EmptyState icon={ScrollText} title={t("minutes.noneTitle")} text={t("minutes.noneText")}>
+            <Link href="/minutes/new">
+              <Button variant="primary">
+                <FilePlus2 size={16} />
+                {t("minutes.add")}
+              </Button>
+            </Link>
+          </EmptyState>
         </Card>
       ) : (
         <>
@@ -98,7 +116,10 @@ function MinutesCard({ meeting: m, lng, featured = false }) {
               {` · ${t("common.participants", { count: m.participants.length })}`}
             </p>
           </div>
-          <StatusBadge meeting={m} />
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {m.manual && <Badge>{t("manual.badge")}</Badge>}
+            <StatusBadge meeting={m} />
+          </div>
         </div>
 
         {m.report_pending ? (
@@ -108,9 +129,9 @@ function MinutesCard({ meeting: m, lng, featured = false }) {
           </p>
         ) : (
           <>
-            {/* What the AI summarised, at a glance */}
+            {/* The summary at a glance: the AI's, or the one written by hand */}
             <div className="flex gap-2 text-sm leading-relaxed">
-              <Sparkles size={15} className="mt-1 shrink-0 text-accent" />
+              {m.manual ? <PenLine size={15} className="mt-1 shrink-0 text-muted" /> : <Sparkles size={15} className="mt-1 shrink-0 text-accent" />}
               <p dir="auto" className={featured ? "line-clamp-4 text-base" : "line-clamp-3"}>
                 {r.summary.join(" ") || t("report.none")}
               </p>

@@ -11,7 +11,9 @@
     "stage": "Room screen",
     "minutes": "Minutes",
     "tasks": "Task follow-up",
-    "presentations": "Presentations"
+    "presentations": "Presentations",
+    "help": "Help Center",
+    "overview": "Overview"
   },
   "common": {
     "participants": "{{count}} participants",
@@ -206,13 +208,14 @@
   },
   "minutes": {
     "title": "Minutes",
-    "subtitle": "Every meeting the AI summarised, ready to export",
+    "subtitle": "Every meeting's minutes, written by the AI or by hand, ready to export",
     "noneTitle": "No minutes yet",
     "noneText": "When a meeting ends, the AI writes its minutes and they appear here.",
     "search": "Search titles, summaries and decisions…",
     "decisions": "{{count}} decisions",
     "tasks": "{{count}} tasks",
-    "openTasks": "{{count}} open"
+    "openTasks": "{{count}} open",
+    "add": "Add minutes manually"
   },
   "tasks": {
     "title": "Task follow-up",
@@ -255,5 +258,52 @@
     "notRecording": "No meeting is live — presenting without recording.",
     "uploading": "Uploading",
     "addHint": "Add a presentation — or drop it anywhere on this page"
+  },
+  "manual": {
+    "title": "Manual minutes",
+    "subtitle": "For a meeting held without LUBB: enter its details, then write its minutes",
+    "date": "Date",
+    "from": "From",
+    "to": "To",
+    "attendees": "Attendees",
+    "addAttendee": "Add attendee",
+    "create": "Create and write the minutes",
+    "creating": "Creating…",
+    "badge": "Manual",
+    "timesInvalid": "The meeting can't end before it starts",
+    "noRecording": "Written by hand: no recording or transcript for this meeting."
+  },
+  "help": {
+    "title": "Help Center",
+    "subtitle": "Get in touch with the LUBB support team",
+    "contactTitle": "We're here to help",
+    "contactText": "Email the support team with any question or problem and we'll get back to you soon.",
+    "contactSoon": "The support email will be added soon."
+  },
+  "overview": {
+    "title": "Overview",
+    "liveNow": "Meeting in progress",
+    "noLive": "No meeting in progress",
+    "noLiveText": "Start a new meeting when you're ready.",
+    "open": "Open meeting",
+    "startNew": "New meeting",
+    "meetings": "Meetings held",
+    "hours": "Meeting hours",
+    "minutes": "Minutes",
+    "approved": "{{count}} approved",
+    "drafts": "{{count}} drafts",
+    "tasks": "Open tasks",
+    "overdue": "{{count}} overdue",
+    "allDone": "Nothing overdue",
+    "presentations": "Presentations",
+    "buttons": "Buttons connected",
+    "ofButtons": "of 20",
+    "recent": "Recent meetings",
+    "attention": "Tasks to follow up",
+    "noneRecent": "No meetings held yet.",
+    "noneTasks": "No open tasks.",
+    "viewAll": "View all",
+    "noDue": "No due date",
+    "speakers": "{{count}} participants"
   }
 }

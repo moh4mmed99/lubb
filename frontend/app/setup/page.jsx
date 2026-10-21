@@ -237,12 +237,13 @@ export default function SetupPage() {
                       </option>
                     ))}
                   </select>
-                  <span
-                    title={online.has(p.device_id) ? t("setup.buttonOnline") : t("setup.buttonOffline")}
-                    className={`pointer-events-none absolute end-2 top-1/2 size-2 -translate-y-1/2 rounded-full ${
-                      online.has(p.device_id) ? "bg-ok" : "bg-line"
-                    }`}
-                  />
+                  {/* green only when this participant's button is connected; nothing while it's offline */}
+                  {online.has(p.device_id) && (
+                    <span
+                      title={t("setup.buttonOnline")}
+                      className="pointer-events-none absolute end-2 top-1/2 size-2 -translate-y-1/2 rounded-full bg-ok"
+                    />
+                  )}
                 </div>
                 <button
                   onClick={() => setChair(p.key)}

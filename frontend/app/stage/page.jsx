@@ -1,10 +1,12 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Maximize, X } from "lucide-react";
+import { motion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Wordmark } from "@/components/Brand";
+import { SpeakerPhoto } from "@/components/SpeakerSpotlight";
 import { elapsed, formatDate, mmss } from "@/lib/format";
 import { useLiveMeeting } from "@/lib/useLiveMeeting";
 
@@ -107,7 +109,16 @@ export default function StagePage() {
           {talking.length > 0 ? (
             talking.map((p) => (
               <Row key={p.id} big>
-                <div className="min-w-0">
+                {/* the speaker's face, large, popping in as they take the floor */}
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 26 }}
+                  className="shrink-0"
+                >
+                  <SpeakerPhoto person={p} className="size-28 text-5xl ring-4 ring-signal md:size-36 md:text-6xl" />
+                </motion.div>
+                <div className="min-w-0 flex-1">
                   <div className="truncate text-6xl font-semibold tracking-tight md:text-7xl">
                     <bdi>{p.name}</bdi>
                   </div>
@@ -193,7 +204,7 @@ function Box({ className = "", children }) {
 
 function Row({ big = false, children }) {
   return (
-    <div className={`flex items-start justify-between gap-6 border-b border-white/20 last:border-b-0 ${big ? "py-8" : "py-4"}`}>{children}</div>
+    <div className={`flex justify-between gap-6 border-b border-white/20 last:border-b-0 ${big ? "items-center py-8" : "items-start py-4"}`}>{children}</div>
   );
 }
 

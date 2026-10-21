@@ -1,4 +1,4 @@
-import { Alexandria, Hanken_Grotesk, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Alexandria, Hanken_Grotesk, IBM_Plex_Sans_Arabic, Outfit } from "next/font/google";
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/AppShell";
 import { Providers } from "./providers";
@@ -27,10 +27,18 @@ const display = Alexandria({
   display: "swap",
 });
 
+// The Latin "LUBB" in the overview title: a round, friendly geometric sans
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["600"],
+  variable: "--font-outfit",
+  display: "swap",
+});
+
 export const metadata = {
   title: "لُبّ · LUBB", // Arabic name with the Latin one beside it (browser tab, bookmarks)
   description: "Smart meeting system — نظام الاجتماعات الذكي",
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "data:," }, // no tab icon: an empty one, so browsers don't show a stale or default logo
 };
 
 // Applies the saved theme before the first paint, so dark mode never flashes white.
@@ -40,7 +48,7 @@ export default async function RootLayout({ children }) {
   // Language lives in a cookie so the server renders the right direction (RTL/LTR) from the start.
   const lang = (await cookies()).get("lang")?.value === "en" ? "en" : "ar";
   return (
-    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} className={`${plex.variable} ${grotesk.variable} ${display.variable}`} suppressHydrationWarning>
+    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} className={`${plex.variable} ${grotesk.variable} ${display.variable} ${outfit.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

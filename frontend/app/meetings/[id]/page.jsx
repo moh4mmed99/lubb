@@ -41,6 +41,15 @@ export default function MinutesPage() {
     if (connected) load();
   }, [connected, load]);
 
+  const editOnOpen = useRef(false);
+  useEffect(() => {
+    if (editOnOpen.current || !meeting?.report || meeting.report.approved) return;
+    if (new URLSearchParams(window.location.search).get("edit") === "1") {
+      editOnOpen.current = true;
+      setDraft(structuredClone(meeting.report));
+    }
+  }, [meeting]);
+
   const printed = useRef(false);
   useEffect(() => {
     if (printed.current || !meeting?.report || meeting.report_pending) return;
@@ -155,7 +164,7 @@ export default function MinutesPage() {
                   {t("report.edit")}
                 </Button>
               )}
-              {meeting.status === "ended" && !meeting.report_pending && !report?.approved && (
+              {meeting.status === "ended" && !meeting.manual && !meeting.report_pending && !report?.approved && (
                 <Button onClick={generate} disabled={busy}>
                   <RefreshCw size={16} />
                   {report ? t("report.regenerate") : t("report.generate")}
@@ -273,8 +282,14 @@ export default function MinutesPage() {
           </>
         )}
 
-        <SpeakingTime meeting={meeting} />
-        <FullTranscript meeting={meeting} />
+        {meeting.manual ? (
+          <p className="mt-10 border-t border-line pt-6 text-xs text-muted">{t("manual.noRecording")}</p>
+        ) : (
+          <>
+            <SpeakingTime meeting={meeting} />
+            <FullTranscript meeting={meeting} />
+          </>
+        )}
       </Card>
       <DetailsRail meeting={meeting} lng={lng} />
       </div>
@@ -416,7 +431,8 @@ function AgendaCoverage({ meeting }) {
                   {t("report.contributions", { count: said.length })} · <span dir="ltr">{mmss(Math.round(secs))}</span>
                 </span>
               )}
-              <Badge tone={said.length ? "ok" : "muted"}>{said.length ? t("report.covered") : t("report.skipped")}</Badge>
+              {/* manual minutes have no recording to tell what was discussed */}
+              {!meeting.manual && <Badge tone={said.length ? "ok" : "muted"}>{said.length ? t("report.covered") : t("report.skipped")}</Badge>}
             </li>
           );
         })}
