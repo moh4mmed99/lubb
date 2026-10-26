@@ -42,7 +42,9 @@ export const metadata = {
 };
 
 // Applies the saved theme before the first paint, so dark mode never flashes white.
-const themeScript = `try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t}catch(e){}`;
+const themeScript = `try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t}catch(e){}` +
+  // first visit in this tab: show the welcome screen (components/WelcomeIntro.jsx); never on the room screen
+  `try{if(!sessionStorage.getItem("lubb-welcomed")&&location.pathname!=="/stage")document.documentElement.dataset.welcome="1"}catch(e){}`;
 
 export default async function RootLayout({ children }) {
   // Language lives in a cookie so the server renders the right direction (RTL/LTR) from the start.

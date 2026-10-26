@@ -140,7 +140,7 @@ export function WaveBackdrop() {
   }, []);
 
   return (
-    <div aria-hidden className="no-print pointer-events-none fixed inset-0 z-0 md:start-60">
+    <div aria-hidden className="no-print pointer-events-none fixed inset-0 z-0 md:start-[16.5rem]">
       <canvas ref={canvas} className="size-full" />
     </div>
   );

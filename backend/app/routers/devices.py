@@ -153,7 +153,7 @@ async def _finish_turn(
 ) -> None:
     # Whisper is CPU/GPU bound (or a network call when remote) — run it off the event loop
     try:
-        text, lang = await asyncio.to_thread(stt.transcribe, pcm, None)
+        text, lang = await asyncio.to_thread(stt.transcribe, pcm, meeting.language.value)
     except Exception as exc:  # remote server down, tunnel expired, model error…
         log.exception("Transcription failed for %s", device_id)
         await manager.broadcast({"type": "error", "source": "stt", "message": str(exc)})

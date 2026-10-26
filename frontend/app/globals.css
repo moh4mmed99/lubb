@@ -148,6 +148,11 @@ body {
   }
 }
 
+/* The welcome screen only exists until this tab has seen it (see components/WelcomeIntro.jsx) */
+html:not([data-welcome]) .welcome {
+  display: none;
+}
+
 @media print {
   .no-print {
     display: none !important;

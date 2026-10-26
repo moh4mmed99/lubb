@@ -305,5 +305,10 @@
     "viewAll": "View all",
     "noDue": "No due date",
     "speakers": "{{count}} participants"
+  },
+  "welcome": {
+    "label": "Welcome to LUBB",
+    "enter": "Enter",
+    "hint": "Scroll down"
   }
 }

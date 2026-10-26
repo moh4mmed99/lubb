@@ -23,6 +23,7 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/lib/theme";
 import { RollingWordmark } from "./RollingWordmark";
+import { WelcomeIntro } from "./WelcomeIntro";
 import { WaveBackdrop } from "./WaveBackdrop";
 import { pageEnter, spring } from "./motion";
 
@@ -63,8 +64,11 @@ export function AppShell({ children }) {
 
   return (
     <div className="flex h-full flex-col md:flex-row">
+      <WelcomeIntro />
       {/* Desktop sidebar: the inverse of the page (black in light mode, light in dark mode), one row per section */}
-      <aside className="no-print hidden w-60 shrink-0 flex-col bg-rail px-5 pt-[calc(var(--gutter-y)+1.05rem)] pb-6 text-rail-fg md:flex">
+      {/* Floating: inset from the window by m-3 on every side, rounded, with a soft shadow. Its top padding is the
+          page gutter less that inset, so the wordmark still sits level with every page's first line. */}
+      <aside className="no-print m-3 hidden w-60 shrink-0 flex-col rounded-[1.375rem] bg-rail px-5 pt-[calc(var(--gutter-y)+1.05rem-0.75rem)] pb-5 text-rail-fg shadow-[0_24px_60px_-24px_rgb(0_0_0/0.5)] ring-1 ring-black/5 md:flex">
         {/* top margin = the page gutter plus the wordmark's own overhang (its marks rise above its box), so the
             wordmark's ink sits level with the first line of every page */}
         {/* only the name rolls on hover; its rolling box ends above the tagline, so the tagline stays still and untouched */}
