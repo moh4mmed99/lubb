@@ -12,6 +12,9 @@ class Settings:
     # started with the hub (app/services/local_mics.py). LOCAL_MICS_HUB is how they reach this hub.
     local_mics: bool = os.getenv("LOCAL_MICS", "true").lower() not in ("0", "false", "no", "off")
     local_mics_hub: str = os.getenv("LOCAL_MICS_HUB", "ws://127.0.0.1:8000")
+    # The USB hub's own port number for socket 1, socket 2, … (its chip needn't number them in order): the mic in
+    # socket N is always btn-N. Default: the Unitek Y-3089. Empty: btn-1, btn-2, … in port order.
+    mic_sockets: str = os.getenv("MIC_SOCKETS", "2,1,4,3")
     # Speech-to-text. "stub" = placeholder text, "whisper" = faster-whisper on this machine,
     # "remote" = POST audio to STT_URL (e.g. the Colab server in colab/).
     stt_engine: str = os.getenv("STT_ENGINE", "stub")

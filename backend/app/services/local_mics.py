@@ -23,7 +23,8 @@ def start() -> subprocess.Popen | None:
         log.warning("USB mics: %s not found, so mics plugged into this machine won't connect", SCRIPT)
         return None
     # its lines ("[btn-1] connected…") go to the hub's own terminal
-    return subprocess.Popen([sys.executable, str(SCRIPT), "--watch", "--hub", settings.local_mics_hub, "--parent", str(os.getpid())])
+    args = ["--watch", "--hub", settings.local_mics_hub, "--parent", str(os.getpid()), "--sockets", settings.mic_sockets]
+    return subprocess.Popen([sys.executable, str(SCRIPT), *args])
 
 
 def stop(proc: subprocess.Popen | None) -> None:

@@ -5,8 +5,10 @@ when someone starts speaking into a mic it presses that mic's button, and after 
 it, so the hub transcribes the turn. Audio is only sent while the hub has given the button the floor.
 
 Mics are found by the USB port they're plugged into, and recorded from that port's sound card, never by name:
-two identical mics in two ports are always two different mics. The first mic in port order is btn-1, the next
-btn-2, and so on, so a mic keeps its button as long as it stays in the same port.
+two identical mics in two ports are always two different mics, and a mic keeps its button as long as it stays
+in the same port. A USB hub's own port numbers needn't follow the order of its sockets, so its order is set once
+(MIC_SOCKETS: the hub's port number for socket 1, socket 2, …; 2,1,4,3 by default, the Unitek Y-3089): the mic in
+socket N is always btn-N. With MIC_SOCKETS empty, the first mic in port order is btn-1, the next btn-2, and so on.
 
 The hub starts this by itself (LOCAL_MICS in backend/.env, on by default) with --watch: mics plugged in or out
 later are picked up within a few seconds. To run it by hand instead:
@@ -17,6 +19,7 @@ later are picked up within a few seconds. To run it by hand instead:
     backend/venv/bin/python scripts/mic_button.py 1=btn-1 2=btn-3   # choose: mic 1 is btn-1, mic 2 is btn-3
     backend/venv/bin/python scripts/mic_button.py btn-1 --manual    # the default mic, press Enter to start / stop
     ... --hub ws://192.168.1.20:8000                                # a hub on another machine
+    ... --sockets 2,1,4,3                                           # the hub's socket order (default MIC_SOCKETS)
 
 With several mics in one room, every mic also hears the people at the other mics. A voice is given to the mic
 that hears it clearly loudest (the one the speaker sits at), so one sentence isn't recorded twice.
@@ -28,6 +31,7 @@ second after a mic connects: it measures the room's noise then.
 import argparse
 import asyncio
 import glob
+import itertools
 import json
 import math
 import os
@@ -119,6 +123,25 @@ def _natural(port: str | None) -> list:
     return [int(n) for n in re.findall(r"\d+", port)] if port else [10**9]
 
 
+def parse_sockets(text: str) -> list[int]:
+    """"2,1,4,3" → [2, 1, 4, 3]: the hub's own port number for socket 1, socket 2, …"""
+    try:
+        sockets = [int(n) for n in text.replace(" ", "").split(",") if n]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{text}' should be the hub's port numbers in socket order, like 2,1,4,3") from None
+    if len(set(sockets)) < len(sockets):
+        raise argparse.ArgumentTypeError(f"'{text}': each port number once")
+    return sockets
+
+
+def socket_number(port: str | None, sockets: list[int]) -> int | None:
+    """Which socket of its USB hub a mic is in (1, 2, …), going by the hub's socket order; None if unknown."""
+    if not port or "." not in port or not sockets:
+        return None
+    hub_port = int(port.rsplit(".", 1)[1])
+    return sockets.index(hub_port) + 1 if hub_port in sockets else None
+
+
 def list_mics() -> list[dict]:
     """Every USB microphone, found through the port it sits on, in port order.
 
@@ -189,9 +212,12 @@ async def open_mic(card: str | None) -> subprocess.Popen:
 class Seat:
     """One microphone (one USB port) acting as one button."""
 
-    def __init__(self, button: str, card: str | None, port: str | None, number: int | None = None):
+    def __init__(self, button: str, card: str | None, port: str | None, number: int | None = None, socket: int | None = None):
         self.button, self.card, self.port = button, card, port
-        self.label = f"{number}, USB port {port}" if port else "default mic"
+        if socket:
+            self.label = f"in socket {socket} (USB port {port})"
+        else:
+            self.label = f"{number}, USB port {port}" if port else "default mic"
         self.gate = VoiceGate()
         self.led = None
         self.ws = None
@@ -292,12 +318,24 @@ async def keep_connected(seat: Seat, peers: dict, hub: str) -> None:
 # ---- Which mic is which button ------------------------------------------------------------------------------
 
 
-def seats_in_port_order(required: bool = True) -> list[Seat]:
-    """Every USB mic in port order: the first is btn-1, the next btn-2, and so on."""
+def seats_in_port_order(required: bool = True, sockets: list[int] = ()) -> list[Seat]:
+    """Every USB mic as a button. With the hub's socket order, the mic in socket N is btn-N, whichever sockets are
+    in use, and any other mic comes after the sockets. Without it, port order: btn-1, btn-2, and so on."""
     mics = list_mics()
     if not mics and required:
         sys.exit("No USB microphones found. Check they're plugged in (and the hub has power), then try again.")
-    return [Seat(f"btn-{i}", m["card"], m["port"], i) for i, m in enumerate(mics, 1)]
+    in_socket: dict[str, int] = {}
+    for m in mics:
+        n = socket_number(m["port"], sockets)
+        if n and n not in in_socket.values():  # a second hub's socket N is just "another mic"
+            in_socket[m["port"]] = n
+    others = itertools.count(len(sockets) + 1)
+    seats = []
+    for m in mics:
+        socket = in_socket.get(m["port"])
+        n = socket or next(others)
+        seats.append(Seat(f"btn-{n}", m["card"], m["port"], n, socket))
+    return seats
 
 
 def seats_from(args: list[str]) -> list[Seat]:
@@ -324,14 +362,14 @@ def seats_from(args: list[str]) -> list[Seat]:
     return seats
 
 
-async def watch(hub: str, parent: int | None = None, every: float = 3) -> None:
-    """Keep every USB mic connected as a button, in port order, following mics plugged in or out.
+async def watch(hub: str, parent: int | None = None, every: float = 3, sockets: list[int] = ()) -> None:
+    """Keep every USB mic connected as a button (by socket, or in port order), following mics plugged in or out.
     `parent`: the hub's process id; when the hub is gone, this stops too."""
     seats: dict[str, Seat] = {}
     tasks: dict[str, asyncio.Task] = {}
     shown = None
     while parent is None or os.getppid() == parent:
-        wanted = {s.button: s for s in seats_in_port_order(required=False)}
+        wanted = {s.button: s for s in seats_in_port_order(required=False, sockets=sockets)}
         for button in list(tasks):
             moved = button not in wanted or (wanted[button].card, wanted[button].port) != (seats[button].card, seats[button].port)
             # a seat that stopped is started again, unless another connection took the button over
@@ -384,6 +422,12 @@ if __name__ == "__main__":
     parser.add_argument("--list", action="store_true", help="list the USB mics with their ports and live levels")
     parser.add_argument("--watch", action="store_true", help="keep following mics plugged in or out (what the hub runs)")
     parser.add_argument("--hub", default="ws://localhost:8000", help="hub address (default ws://localhost:8000)")
+    parser.add_argument(
+        "--sockets",
+        type=parse_sockets,
+        default=os.environ.get("MIC_SOCKETS", "2,1,4,3"),  # the Unitek Y-3089, as in backend/app/config.py
+        help="the USB hub's port number for socket 1, socket 2, … e.g. 2,1,4,3: then the mic in socket N is btn-N",
+    )
     parser.add_argument("--parent", type=int, help=argparse.SUPPRESS)  # set by the hub: stop when it stops
     parser.add_argument("--manual", action="store_true", help="one mic only: press Enter to start and stop talking")
     args = parser.parse_args()
@@ -394,20 +438,23 @@ if __name__ == "__main__":
             if not mics:
                 sys.exit("No USB microphones found. Check they're plugged in (and the hub has power), then try again.")
             for i, m in enumerate(mics, 1):
-                print(f"{i}. {m['name']}   USB port {m['port']}   (sound card {m['card']})")
+                socket = socket_number(m["port"], args.sockets)
+                where = f"socket {socket}, " if socket else ""
+                print(f"{i}. {m['name']}   {where}USB port {m['port']}   (sound card {m['card']})")
             print()
             asyncio.run(show_levels(mics))
             sys.exit(0)
         if args.watch:
-            print(f"Watching for USB mics; they connect to the hub at {args.hub} as btn-1, btn-2, … in port order.")
-            asyncio.run(watch(args.hub, args.parent))
+            order = "the mic in socket N is btn-N" if args.sockets else "as btn-1, btn-2, … in port order"
+            print(f"Watching for USB mics; they connect to the hub at {args.hub}, {order}.")
+            asyncio.run(watch(args.hub, args.parent, sockets=args.sockets))
             sys.exit(0)
         if args.seats:
             seats = seats_from(args.seats)
         elif args.manual:
             seats = [Seat("btn-1", None, None)]
         else:
-            seats = seats_in_port_order()
+            seats = seats_in_port_order(sockets=args.sockets)
         if args.manual and len(seats) > 1:
             sys.exit("--manual works with one mic; with several, leave it hands-free.")
         print("Mics → buttons:")

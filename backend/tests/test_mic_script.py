@@ -30,6 +30,22 @@ def test_identical_mics_are_numbered_by_port(monkeypatch):
     assert [(s.button, s.port, s.card) for s in seats] == [("btn-1", "3-1.1", "2"), ("btn-2", "3-1.2", "3")]
 
 
+def test_with_the_socket_order_the_mic_in_socket_n_is_btn_n(monkeypatch):
+    # the Unitek hub's chip numbers its sockets 2, 1, 4, 3; mics in sockets 1 and 3, and one more on another port
+    monkeypatch.setattr(
+        mb,
+        "list_mics",
+        lambda: [
+            {"card": "1", "port": "1-1.4.2", "name": "USB_MIC"},
+            {"card": "2", "port": "1-1.4.4", "name": "USB_MIC"},
+            {"card": "3", "port": "1-1.4.5", "name": "USB_MIC"},
+        ],
+    )
+    seats = mb.seats_in_port_order(sockets=mb.parse_sockets("2,1,4,3"))
+    assert [(s.button, s.port) for s in seats] == [("btn-1", "1-1.4.2"), ("btn-3", "1-1.4.4"), ("btn-5", "1-1.4.5")]
+    assert seats[1].label == "in socket 3 (USB port 1-1.4.4)"
+
+
 def test_port_order_is_numeric():
     ports = ["3-1.10", "3-1.2", "3-1.4.1", "3-2"]
     assert sorted(ports, key=mb._natural) == ["3-1.2", "3-1.4.1", "3-1.10", "3-2"]
