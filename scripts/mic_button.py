@@ -1,27 +1,33 @@
-"""Use the computer's microphones as LUBB speaker buttons, for testing without the hardware.
+"""Use the microphones plugged into this computer (e.g. through a USB hub) as LUBB speaker buttons.
 
-Each microphone connects to the hub exactly like a real button (see docs/device-protocol.md). By default it is
-hands-free: when someone starts speaking into a mic it presses that mic's button, and after a second of silence
-it releases it, so the hub transcribes the turn. Audio is only sent while the hub has given the button the floor.
+Each microphone connects to the hub exactly like a real button (see docs/device-protocol.md). It's hands-free:
+when someone starts speaking into a mic it presses that mic's button, and after a second of silence it releases
+it, so the hub transcribes the turn. Audio is only sent while the hub has given the button the floor.
 
-    backend/venv/bin/python scripts/mic_button.py                   # every mic, in USB-port order: btn-1, btn-2, …
+Mics are found by the USB port they're plugged into, and recorded from that port's sound card, never by name:
+two identical mics in two ports are always two different mics. The first mic in port order is btn-1, the next
+btn-2, and so on, so a mic keeps its button as long as it stays in the same port.
+
+The hub starts this by itself (LOCAL_MICS in backend/.env, on by default) with --watch: mics plugged in or out
+later are picked up within a few seconds. To run it by hand instead:
+
     backend/venv/bin/python scripts/mic_button.py --list            # the mics, their USB ports, live levels
-    backend/venv/bin/python scripts/mic_button.py btn-1             # just the default mic, as btn-1
+    backend/venv/bin/python scripts/mic_button.py                   # every mic now, in port order: btn-1, btn-2, …
+    backend/venv/bin/python scripts/mic_button.py --watch           # the same, and keep following plug / unplug
     backend/venv/bin/python scripts/mic_button.py 1=btn-1 2=btn-3   # choose: mic 1 is btn-1, mic 2 is btn-3
-    backend/venv/bin/python scripts/mic_button.py btn-1 --manual    # one mic, press Enter to start / stop
+    backend/venv/bin/python scripts/mic_button.py btn-1 --manual    # the default mic, press Enter to start / stop
     ... --hub ws://192.168.1.20:8000                                # a hub on another machine
-
-Mics are numbered by the USB port they're plugged into, so the numbers stay the same after a reboot or a replug
-in the same port. Use --list and speak into each mic to see which number (and port) it is.
 
 With several mics in one room, every mic also hears the people at the other mics. A voice is given to the mic
 that hears it clearly loudest (the one the speaker sits at), so one sentence isn't recorded twice.
 
-Records through PipeWire (pw-record). Stay quiet for the first second: each mic measures the room's noise then.
+Records with arecord (alsa-utils); falls back to PipeWire if the sound card is busy. Stay quiet for the first
+second after a mic connects: it measures the room's noise then.
 """
 
 import argparse
 import asyncio
+import glob
 import json
 import math
 import os
@@ -29,6 +35,7 @@ import re
 import statistics
 import subprocess
 import sys
+import tempfile
 from array import array
 from collections import deque
 
@@ -41,6 +48,7 @@ START_AFTER = 3  # loud frames in a row that count as speech (60 ms)
 STOP_AFTER = 50  # quiet frames in a row that end the turn (1 s)
 PRE_ROLL = 15  # frames kept from just before speech starts (300 ms), so the first word isn't cut
 MARGIN = 6.0  # dB: with several mics, a voice belongs to a mic only if it's this much louder there than anywhere else
+REPLACED = 4001  # the hub closes a button's connection with this when another connection takes the same button
 
 LEDS = {
     "ready": "🔵 ready",
@@ -98,15 +106,12 @@ class VoiceGate:
         return None
 
 
-def _usb_port(card: str | None) -> str | None:
-    """The USB port path of a sound card, e.g. "3-1.2" (bus 3, port 1, then port 2 of the hub on it)."""
-    if card is None:
-        return None
-    try:
-        target = os.path.realpath(f"/sys/class/sound/card{card}/device")
-    except OSError:
-        return None
-    ports = re.findall(r"/(\d+-[\d.]+)(?=[:/])", target)
+# ---- Finding mics: by USB port ------------------------------------------------------------------------------
+
+
+def usb_port(sysfs_device: str) -> str | None:
+    """The USB port path in a device's sysfs path, e.g. "3-1.2" = bus 3, port 1, then port 2 of the hub on it."""
+    ports = re.findall(r"/(\d+-[\d.]+)(?=[:/])", sysfs_device)
     return ports[-1] if ports else None
 
 
@@ -115,45 +120,85 @@ def _natural(port: str | None) -> list:
 
 
 def list_mics() -> list[dict]:
-    """The microphones PipeWire knows, numbered by USB port (so a mic keeps its number in the same port)."""
-    dump = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, check=True).stdout)
-    devices = {o["id"]: (o.get("info") or {}).get("props") or {} for o in dump}
+    """Every USB microphone, found through the port it sits on, in port order.
+
+    Each Linux sound card links to the USB port it's plugged into; a card that can record is a mic."""
     mics = []
+    for path in glob.glob("/sys/class/sound/card[0-9]*"):
+        card = path.rsplit("card", 1)[1]
+        port = usb_port(os.path.realpath(f"{path}/device"))
+        if not port or not glob.glob(f"/proc/asound/card{card}/pcm*c"):
+            continue  # not on USB, or can't record
+        try:
+            with open(f"{path}/id") as f:
+                name = f.read().strip()
+        except OSError:
+            name = f"card {card}"
+        mics.append({"card": card, "port": port, "name": name})
+    return sorted(mics, key=lambda m: _natural(m["port"]))
+
+
+# ---- Recording from one port --------------------------------------------------------------------------------
+
+
+def _pipewire_target(card: str) -> str | None:
+    """PipeWire's id for the recording side of a sound card, for when the card is busy (PipeWire holds it)."""
+    try:
+        dump = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=10).stdout or "[]")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    devices = {o["id"]: (o.get("info") or {}).get("props") or {} for o in dump}
     for obj in dump:
         props = (obj.get("info") or {}).get("props") or {}
-        if props.get("media.class") != "Audio/Source":
-            continue
         device = devices.get(props.get("device.id"), {})
-        card = props.get("api.alsa.card") or device.get("api.alsa.card")
-        mics.append(
-            {
-                "name": props["node.name"],
-                "label": props.get("node.description") or props["node.name"],
-                "port": _usb_port(None if card is None else str(card)),
-            }
-        )
-    return sorted(mics, key=lambda m: (_natural(m["port"]), m["name"]))
+        if props.get("media.class") == "Audio/Source" and str(props.get("api.alsa.card", device.get("api.alsa.card"))) == card:
+            return str(props.get("object.serial") or props.get("node.name"))
+    return None
 
 
-def record(target: str | None) -> subprocess.Popen:
-    return subprocess.Popen(
-        ["pw-record", "--rate", "16000", "--channels", "1", "--format", "s16", *(["--target", target] if target else []), "-"],
+async def open_mic(card: str | None) -> subprocess.Popen:
+    """Start recording 16 kHz mono 16-bit audio from one sound card (None = the system's default mic)."""
+    log = tempfile.TemporaryFile()  # arecord's messages, read only if it fails
+    device = f"plughw:{card},0" if card is not None else "default"
+    proc = subprocess.Popen(
+        ["arecord", "-q", "-D", device, "-f", "S16_LE", "-r", "16000", "-c", "1", "-t", "raw"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=log,
     )
+    await asyncio.sleep(0.3)
+    if proc.poll() is None:
+        return proc
+    log.seek(0)
+    error = log.read().decode(errors="replace").strip().splitlines()[-1:] or ["no audio"]
+    target = _pipewire_target(card) if card is not None else None
+    if target:  # the card is held by PipeWire: record through it instead, still from this card
+        proc = subprocess.Popen(
+            ["pw-record", "--rate", "16000", "--channels", "1", "--format", "s16", "--target", target, "-"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        await asyncio.sleep(0.3)
+        if proc.poll() is None:
+            return proc
+    raise RuntimeError(f"can't record from this mic ({error[0]})")
+
+
+# ---- One mic as one button ----------------------------------------------------------------------------------
 
 
 class Seat:
-    """One microphone acting as one button."""
+    """One microphone (one USB port) acting as one button."""
 
-    def __init__(self, button: str, target: str | None, label: str):
-        self.button, self.target, self.label = button, target, label
+    def __init__(self, button: str, card: str | None, port: str | None, number: int | None = None):
+        self.button, self.card, self.port = button, card, port
+        self.label = f"{number}, USB port {port}" if port else "default mic"
         self.gate = VoiceGate()
         self.led = None
         self.ws = None
+        self.replaced = False  # another connection took this button over
 
     def say(self, text: str) -> None:
-        print(f"[{self.button}] {text}")
+        print(f"[{self.button}] {text}", flush=True)
 
 
 async def press(seat: Seat, down: bool) -> None:
@@ -162,65 +207,155 @@ async def press(seat: Seat, down: bool) -> None:
     seat.say("🎙  speaking…" if down else "… turn ended, the hub is transcribing")
 
 
-async def run_seat(seat: Seat, seats: list[Seat], hub: str, manual: bool) -> None:
+async def run_seat(seat: Seat, peers: dict, hub: str, manual: bool = False) -> None:
+    """One mic as one button, until the mic or the hub goes away. `peers` = every seat running, this one included."""
     loop = asyncio.get_running_loop()
-    mic = record(seat.target)
-    async with websockets.connect(f"{hub}/ws/device/{seat.button}") as ws:
-        seat.ws = ws
-        await ws.send(json.dumps({"type": "hello", "firmware": "pc-mic", "battery": 100}))
-        seat.say(f"connected — mic {seat.label}")
+    mic = await open_mic(seat.card)
+    try:
+        async with websockets.connect(f"{hub}/ws/device/{seat.button}") as ws:
+            seat.ws, seat.led, seat.gate.held = ws, None, False
+            await ws.send(json.dumps({"type": "hello", "firmware": "usb-mic", "battery": 100}))
+            seat.say(f"connected — mic {seat.label}")
 
-        async def hub_messages() -> None:
-            async for raw in ws:
-                msg = json.loads(raw)
-                if msg.get("type") == "led" and msg["state"] != seat.led:
-                    seat.led = msg["state"]
-                    seat.say(LEDS.get(msg["state"], msg["state"]))
-                elif msg.get("type") == "floor_denied":
-                    seat.say(f"⛔ floor denied ({msg.get('reason')})")
+            async def hub_messages() -> None:
+                async for raw in ws:
+                    msg = json.loads(raw)
+                    if msg.get("type") == "led" and msg["state"] != seat.led:
+                        seat.led = msg["state"]
+                        seat.say(LEDS.get(msg["state"], msg["state"]))
+                    elif msg.get("type") == "floor_denied":
+                        seat.say(f"⛔ floor denied ({msg.get('reason')})")
 
-        async def keyboard() -> None:
-            seat.say("press Enter to start talking, Enter again to stop")
-            while True:
-                if not await loop.run_in_executor(None, sys.stdin.readline):  # wait for Enter
-                    return  # no keyboard (input closed): just listen
-                await press(seat, not seat.gate.held)
+            async def keyboard() -> None:
+                seat.say("press Enter to start talking, Enter again to stop")
+                while True:
+                    if not await loop.run_in_executor(None, sys.stdin.readline):  # wait for Enter
+                        return  # no keyboard (input closed): just listen
+                    await press(seat, not seat.gate.held)
 
-        async def audio() -> None:
-            pending: deque[bytes] = deque(maxlen=PRE_ROLL)  # recent audio not yet sent
-            while True:
-                chunk = await loop.run_in_executor(None, mic.stdout.read, FRAME)
-                if not chunk:
-                    raise RuntimeError(f"The mic {seat.label} stopped (unplugged, or muted at the system level?)")
-                if not manual:
-                    calibrating = seat.gate.threshold is None
-                    others = [s.gate.lift for s in seats if s is not seat and s.gate.room is not None]
-                    change = seat.gate.step(level_db(chunk), others)
-                    if calibrating and seat.gate.threshold is not None:
-                        seat.say(f"room noise {seat.gate.room:.0f} dB → listening for voices above {seat.gate.threshold:.0f} dB")
-                    if change == "press":
-                        await press(seat, True)
-                    elif change == "release":
-                        await press(seat, False)
-                        pending.clear()
-                # like a real button: stream only while held and the hub has granted the floor.
-                # Until then keep the last moment, so speech from just before the grant isn't lost.
-                pending.append(chunk)
-                if seat.gate.held and seat.led == "talking":
-                    while pending:
-                        await ws.send(pending.popleft())
+            async def audio() -> None:
+                pending: deque[bytes] = deque(maxlen=PRE_ROLL)  # recent audio not yet sent
+                while True:
+                    chunk = await loop.run_in_executor(None, mic.stdout.read, FRAME)
+                    if not chunk:
+                        raise RuntimeError("the mic stopped (unplugged?)")
+                    if not manual:
+                        calibrating = seat.gate.threshold is None
+                        others = [s.gate.lift for s in list(peers.values()) if s is not seat and s.gate.room is not None]
+                        change = seat.gate.step(level_db(chunk), others)
+                        if calibrating and seat.gate.threshold is not None:
+                            seat.say(f"room noise {seat.gate.room:.0f} dB → listening for voices above {seat.gate.threshold:.0f} dB")
+                        if change == "press":
+                            await press(seat, True)
+                        elif change == "release":
+                            await press(seat, False)
+                            pending.clear()
+                    # like a real button: stream only while held and the hub has granted the floor.
+                    # Until then keep the last moment, so speech from just before the grant isn't lost.
+                    pending.append(chunk)
+                    if seat.gate.held and seat.led == "talking":
+                        while pending:
+                            await ws.send(pending.popleft())
 
-        try:
             await asyncio.gather(hub_messages(), audio(), *([keyboard()] if manual else []))
-        finally:
-            mic.terminate()
+    finally:
+        mic.terminate()
+
+
+async def keep_connected(seat: Seat, peers: dict, hub: str) -> None:
+    """Watch mode: keep one mic connected, reconnecting whenever the hub restarts or isn't up yet.
+    Ends when the mic stops (unplugged) or another connection takes the button over."""
+    waiting = False
+    while True:
+        try:
+            await run_seat(seat, peers, hub)
+        except WebSocketException as exc:
+            if getattr(getattr(exc, "rcvd", None), "code", None) == REPLACED:
+                seat.say("another connection took this button over; leaving it to that one")
+                seat.replaced = True
+                return
+            if not waiting:
+                seat.say("hub went away, reconnecting…")
+                waiting = True
+        except OSError:
+            if not waiting:
+                seat.say("waiting for the hub…")
+                waiting = True
+        except RuntimeError as exc:  # the mic stopped or can't be opened
+            seat.say(str(exc))
+            return
+        else:
+            waiting = False
+        await asyncio.sleep(2)
+
+
+# ---- Which mic is which button ------------------------------------------------------------------------------
+
+
+def seats_in_port_order(required: bool = True) -> list[Seat]:
+    """Every USB mic in port order: the first is btn-1, the next btn-2, and so on."""
+    mics = list_mics()
+    if not mics and required:
+        sys.exit("No USB microphones found. Check they're plugged in (and the hub has power), then try again.")
+    return [Seat(f"btn-{i}", m["card"], m["port"], i) for i, m in enumerate(mics, 1)]
+
+
+def seats_from(args: list[str]) -> list[Seat]:
+    """`btn-1` = the default mic as btn-1; `2=btn-3` = mic 2 (its --list number, or its USB port) as btn-3."""
+    mics = list_mics() if any("=" in a for a in args) else []
+    seats = []
+    for arg in args:
+        if "=" not in arg:
+            seats.append(Seat(arg, None, None))
+            continue
+        which, button = arg.split("=", 1)
+        if which.isdigit() and 0 < int(which) <= len(mics):
+            mic = mics[int(which) - 1]
+        else:
+            mic = next((m for m in mics if m["port"] == which), None)
+        if not mic:
+            found = "\n".join(f"  {i}. {m['name']}  (USB port {m['port']})" for i, m in enumerate(mics, 1)) or "  none"
+            sys.exit(f"No mic '{which}'. USB mics connected:\n{found}")
+        seats.append(Seat(button, mic["card"], mic["port"], mics.index(mic) + 1))
+    if len({s.button for s in seats}) < len(seats):
+        sys.exit("Each button can be used by one mic only.")
+    if len({s.port for s in seats}) < len(seats):
+        sys.exit("Each mic can be one button only.")
+    return seats
+
+
+async def watch(hub: str, parent: int | None = None, every: float = 3) -> None:
+    """Keep every USB mic connected as a button, in port order, following mics plugged in or out.
+    `parent`: the hub's process id; when the hub is gone, this stops too."""
+    seats: dict[str, Seat] = {}
+    tasks: dict[str, asyncio.Task] = {}
+    shown = None
+    while parent is None or os.getppid() == parent:
+        wanted = {s.button: s for s in seats_in_port_order(required=False)}
+        for button in list(tasks):
+            moved = button not in wanted or (wanted[button].card, wanted[button].port) != (seats[button].card, seats[button].port)
+            # a seat that stopped is started again, unless another connection took the button over
+            if moved or (tasks[button].done() and not seats[button].replaced):
+                tasks.pop(button).cancel()
+                seats.pop(button)
+        for button, seat in wanted.items():
+            if button not in tasks:
+                seats[button] = seat
+                tasks[button] = asyncio.create_task(keep_connected(seat, seats, hub))
+        mapping = [f"{b} ← mic {seats[b].label}" for b in sorted(seats, key=_natural)]
+        if mapping != shown:
+            shown = mapping
+            print("Mics → buttons:  " + "   ".join(mapping) if mapping else "No USB mics yet: plug them in and they'll connect by themselves.", flush=True)
+        await asyncio.sleep(every)
+    for task in tasks.values():
+        task.cancel()
 
 
 async def show_levels(mics: list[dict], seconds: float = 12) -> None:
     """Live level bars for every mic, so you can tell which number is which by speaking into one."""
     loop = asyncio.get_running_loop()
     levels = [-120.0] * len(mics)
-    procs = [record(m["name"]) for m in mics]
+    procs = [await open_mic(m["card"]) for m in mics]
 
     async def read(i: int) -> None:
         while True:
@@ -243,77 +378,51 @@ async def show_levels(mics: list[dict], seconds: float = 12) -> None:
         proc.terminate()
 
 
-def seats_in_port_order() -> list[Seat]:
-    """Every connected mic, numbered by USB port: the first one on the hub is btn-1, the next btn-2, and so on."""
-    mics = list_mics()
-    usb = [m for m in mics if m["port"]] or mics  # the hub's mics (not built-in ones), unless no port is known
-    if not usb:
-        sys.exit("No microphones found. Check they're plugged in (and the hub has power), then try again.")
-    return [Seat(f"btn-{i}", m["name"], f"{i}, USB port {m['port'] or '?'}") for i, m in enumerate(usb, 1)]
-
-
-def seats_from(args: list[str]) -> list[Seat]:
-    """`btn-1` = the default mic as btn-1; `2=btn-3` = mic 2 (its --list number, USB port or system name) as btn-3."""
-    mics = list_mics() if any("=" in a for a in args) else []
-    seats = []
-    for arg in args:
-        if "=" not in arg:
-            seats.append(Seat(arg, None, "default"))
-            continue
-        which, button = arg.split("=", 1)
-        if which.isdigit() and 0 < int(which) <= len(mics):
-            mic = mics[int(which) - 1]
-        else:
-            mic = next((m for m in mics if which in (m["port"], m["name"])), None)
-        if not mic:
-            found = "\n".join(f"  {i + 1}. {m['label']}  (USB port {m['port'] or '?'})" for i, m in enumerate(mics)) or "  none"
-            sys.exit(f"No mic '{which}'. Connected mics:\n{found}")
-        seats.append(Seat(button, mic["name"], f"{mics.index(mic) + 1}, USB port {mic['port'] or '?'}"))
-    if len({s.button for s in seats}) < len(seats):
-        sys.exit("Each button can be used by one mic only.")
-    if len({s.target for s in seats}) < len(seats):
-        sys.exit("Each mic can be one button only.")
-    return seats
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Use this computer's microphones as LUBB speaker buttons.")
-    parser.add_argument(
-        "seats", nargs="*", help="nothing: every mic in USB-port order (btn-1, btn-2, …); btn-1: the default mic; or MIC=BUTTON pairs"
-    )
-    parser.add_argument("--list", action="store_true", help="list the connected mics with their USB ports and live levels")
+    parser = argparse.ArgumentParser(description="Use the USB microphones on this computer as LUBB speaker buttons.")
+    parser.add_argument("seats", nargs="*", help="nothing: every USB mic in port order (btn-1, btn-2, …); btn-1: the default mic; or MIC=BUTTON pairs")
+    parser.add_argument("--list", action="store_true", help="list the USB mics with their ports and live levels")
+    parser.add_argument("--watch", action="store_true", help="keep following mics plugged in or out (what the hub runs)")
     parser.add_argument("--hub", default="ws://localhost:8000", help="hub address (default ws://localhost:8000)")
+    parser.add_argument("--parent", type=int, help=argparse.SUPPRESS)  # set by the hub: stop when it stops
     parser.add_argument("--manual", action="store_true", help="one mic only: press Enter to start and stop talking")
     args = parser.parse_args()
+    sys.stdout.reconfigure(line_buffering=True)  # show each change at once, even when piped
     try:
         if args.list:
             mics = list_mics()
             if not mics:
-                sys.exit("No microphones found. Check they're plugged in (and the hub has power), then try again.")
+                sys.exit("No USB microphones found. Check they're plugged in (and the hub has power), then try again.")
             for i, m in enumerate(mics, 1):
-                print(f"{i}. {m['label']}   USB port {m['port'] or '?'}   ({m['name']})")
+                print(f"{i}. {m['name']}   USB port {m['port']}   (sound card {m['card']})")
             print()
             asyncio.run(show_levels(mics))
+            sys.exit(0)
+        if args.watch:
+            print(f"Watching for USB mics; they connect to the hub at {args.hub} as btn-1, btn-2, … in port order.")
+            asyncio.run(watch(args.hub, args.parent))
             sys.exit(0)
         if args.seats:
             seats = seats_from(args.seats)
         elif args.manual:
-            seats = [Seat("btn-1", None, "default")]
+            seats = [Seat("btn-1", None, None)]
         else:
             seats = seats_in_port_order()
         if args.manual and len(seats) > 1:
             sys.exit("--manual works with one mic; with several, leave it hands-free.")
-        sys.stdout.reconfigure(line_buffering=True)  # show each change at once, even when piped
         print("Mics → buttons:")
         for seat in seats:
             print(f"  {seat.button}  ←  mic {seat.label}")
         print(f"Hub {args.hub}. Stay quiet for a second while the mics measure the room. Ctrl+C to quit.")
+        peers = {s.button: s for s in seats}
 
         async def main() -> None:
-            await asyncio.gather(*(run_seat(s, seats, args.hub, args.manual) for s in seats))
+            await asyncio.gather(*(run_seat(s, peers, args.hub, args.manual) for s in seats))
 
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nBye")
+    except RuntimeError as exc:
+        sys.exit(f"Microphone problem: {exc}")
     except (OSError, WebSocketException) as exc:
         sys.exit(f"Could not reach the hub at {args.hub}: {exc}")

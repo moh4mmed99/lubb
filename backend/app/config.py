@@ -8,6 +8,10 @@ class Settings:
     # Master switch for all microphones. Off: buttons stay muted and their audio is dropped.
     # Turn on once the real button mics are connected.
     mics_enabled: bool = os.getenv("MICS_ENABLED", "true").lower() not in ("0", "false", "no", "off")
+    # USB mics plugged into this machine (e.g. through a USB hub) connect as buttons btn-1, btn-2, … in port order,
+    # started with the hub (app/services/local_mics.py). LOCAL_MICS_HUB is how they reach this hub.
+    local_mics: bool = os.getenv("LOCAL_MICS", "true").lower() not in ("0", "false", "no", "off")
+    local_mics_hub: str = os.getenv("LOCAL_MICS_HUB", "ws://127.0.0.1:8000")
     # Speech-to-text. "stub" = placeholder text, "whisper" = faster-whisper on this machine,
     # "remote" = POST audio to STT_URL (e.g. the Colab server in colab/).
     stt_engine: str = os.getenv("STT_ENGINE", "stub")
