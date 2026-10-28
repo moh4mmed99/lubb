@@ -1,0 +1,9 @@
+# LUBB AI server (ai/server.py), on the machine with the GPU.
+# PyTorch with CUDA comes from PyTorch's own index, so install it first:
+#   venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cu130
+fastapi>=0.115
+uvicorn[standard]>=0.32
+httpx>=0.27          # forwards the minutes requests to Ollama
+numpy
+transformers>=4.56   # Whisper on the GPU
+faster-whisper>=1.1  # only for its voice detector (Silero VAD), the same one the Colab server uses

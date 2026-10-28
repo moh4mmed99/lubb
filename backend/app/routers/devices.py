@@ -15,7 +15,7 @@ from .. import state
 from ..config import settings
 from ..models import FloorMode, Meeting, SlideRef, Utterance
 from ..realtime import manager
-from ..services import stt
+from ..services import recordings, stt
 from ..store import store
 
 router = APIRouter(tags=["devices"])
@@ -169,6 +169,12 @@ async def _finish_turn(
         agenda_index=agenda_index,
         slide=slide,
     )
+    if settings.record_audio:
+        try:
+            await asyncio.to_thread(recordings.save_turn, meeting.id, utterance.id, pcm)
+            utterance.audio = True
+        except OSError:  # disk full… the text is what matters most, so keep it anyway
+            log.exception("Could not save the recording of a turn")
     # Turns can finish transcribing out of order; keep the transcript in speaking order.
     bisect.insort(meeting.utterances, utterance, key=lambda u: u.started_at)
     store.save(meeting)

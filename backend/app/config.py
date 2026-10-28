@@ -8,6 +8,9 @@ class Settings:
     # Master switch for all microphones. Off: buttons stay muted and their audio is dropped.
     # Turn on once the real button mics are connected.
     mics_enabled: bool = os.getenv("MICS_ENABLED", "true").lower() not in ("0", "false", "no", "off")
+    # Keep the audio of every transcribed turn (data/recordings/), so a meeting can be listened to again from the
+    # archive. These are recordings of what people said: turn off where they mustn't be kept.
+    record_audio: bool = os.getenv("RECORD_AUDIO", "true").lower() not in ("0", "false", "no", "off")
     # USB mics plugged into this machine (e.g. through a USB hub) connect as buttons btn-1, btn-2, … in port order,
     # started with the hub (app/services/local_mics.py). LOCAL_MICS_HUB is how they reach this hub.
     local_mics: bool = os.getenv("LOCAL_MICS", "true").lower() not in ("0", "false", "no", "off")
@@ -25,6 +28,9 @@ class Settings:
     llm_engine: str = os.getenv("LLM_ENGINE", "stub")
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
     llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:14b")
+    # How much the model reads at once (tokens). The whole transcript must fit, or Ollama silently drops the start
+    # of it. 32768 ≈ 2 hours of talking.
+    llm_context: int = int(os.getenv("LLM_CONTEXT", "32768"))
     # Shared secret sent as "Authorization: Bearer <token>" to remote AI servers.
     ai_token: str = os.getenv("AI_TOKEN", "")
     db_path: str = os.getenv("DB_PATH", "data/lubb.db")

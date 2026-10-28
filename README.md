@@ -1,4 +1,4 @@
-# LUBB AI — لُبّ  · v1.3
+# LUBB AI — لُبّ  · v1.4
 
 Smart meeting system — نظام الاجتماعات الذكي
 
@@ -16,10 +16,160 @@ English is fully supported.
                        Web app (Next.js) — dashboard, KPIs, setup, archive, minutes, tasks, presentations
 ```
 
-Contents: [What's new in v1.3](#whats-new-in-v13) · [v1.2](#whats-new-in-v12) · [Getting started on Ubuntu](#getting-started-on-ubuntu) ·
-[Getting started on macOS](#getting-started-on-macos) · [How it works](#how-it-works) ·
+Contents: [What's new in v1.4](#whats-new-in-v14) · [v1.3](#whats-new-in-v13) · [v1.2](#whats-new-in-v12) · [Getting started on Ubuntu](#getting-started-on-ubuntu) ·
+[Getting started on macOS](#getting-started-on-macos) · [Connecting the two PCs](#connecting-the-two-pcs) · [How it works](#how-it-works) ·
 [Running the AI](#running-the-ai) · [Configuration](#configuration) · [Project layout](#project-layout) ·
 [Working on the code](#working-on-the-code) · [Roadmap](#roadmap)
+
+---
+
+## What's new in v1.4
+
+**The AI runs on our own PC (no more Colab)**
+- **AI PC:** [ai/server.py](ai/server.py) runs Whisper and the minutes LLM on the NVIDIA DGX Spark (`node2`) and serves the hub over the network, with the same API as the Colab server. The address and token never change, and there's no notebook to start before a meeting.
+- **Whisper on the GPU:** the ready-made `faster-whisper` has no GPU build for ARM machines, so the AI PC runs Whisper through PyTorch instead: 9 s of Arabic speech is transcribed in 0.4 s, a 38 s turn in 1.2 s. Silences are cut out first with the same voice detector `faster-whisper` uses.
+- **Always on:** the AI server (`lubb-ai`, port 8001) and Ollama (qwen2.5:14b) are systemd user services that start when the PC boots, even before anyone logs in. Ollama only answers the PC itself; other machines go through the AI server, which checks `AI_TOKEN`.
+- **Long meetings are no longer cut off:** Ollama reads only a few thousand tokens by default and silently dropped the start of a long transcript. The minutes request now asks for 32,768 tokens, about 2 hours of talk (`LLM_CONTEXT`).
+- **Fewer made-up words:** text Whisper invents on silence or noise (subtitle credits such as "ترجمة نانسي قنقر", "اشتركوا في القناة") and phrases it repeats in a loop are removed, and Whisper is told the meeting's language instead of guessing it on every turn.
+
+**Two PCs**
+- **New guide: [Connecting the two PCs](#connecting-the-two-pcs)** (below). Step by step: PC1 (AI) serves PC2 (the hub, the web app and the mics), either over the same network (recommended: fastest, nothing leaves the building) or over the internet with Tailscale, with a test command and a table of what each error means.
+
+**USB mics as speaker buttons**
+- **Started by the hub:** [scripts/mic_button.py](scripts/mic_button.py) starts and stops with the hub (`LOCAL_MICS`, on by default). Every USB mic connects as a button, hands-free: speaking presses it, a second of silence releases it. Mics plugged in or out later are picked up within 3 seconds.
+- **Found by USB port, never by name:** each mic is recorded from its own port's sound card, so two identical mics are never mixed up (before, both UGREEN mics ended up on the first person).
+- **Socket N is btn-N:** a USB hub's chip doesn't number its sockets in order. `MIC_SOCKETS` gives the order once; the Unitek Y-3089's (`2,1,4,3`) is built in, so the mic in socket 1 is always btn-1, socket 3 always btn-3.
+- **One voice, one mic:** every mic hears everyone in the room, so a voice goes to the mic that hears it clearly loudest and isn't recorded twice. A voice two mics hear almost alike (two mics near one speaker) goes to the louder one instead of being dropped.
+- **Made for the UGREEN mics:** their noise gate sends pure silence between voices, which no longer throws off the room measurement. Each mic keeps measuring the room, so a measurement taken while someone was talking is put right within a second of quiet.
+- **Clearer log:** a turn spoken with no live meeting says *not recorded* instead of *the hub is transcribing*. `MIC_DEBUG=1` prints what each mic hears, twice a second.
+
+**Archive**
+- **Meeting recordings:** the audio of every transcribed turn is kept. On a meeting's minutes page, *Recording (التسجيل الصوتي)* beside *Full transcript* plays the whole meeting, turn after turn (download from the player's menu). Deleting a meeting deletes its recording. `RECORD_AUDIO=false` turns recording off. New API: `GET /meetings/{id}/audio`.
+
+**Docs:** *Getting started* now installs `alsa-utils` for the mics and uses the hub's real venv folder (`venv`).
+
+**Tests:** 38 backend tests (adds USB mic numbering by port and socket, voice detection across mics and noise gates, meeting recordings, Whisper clean-up and manual minutes).
+
+### Connecting the two PCs
+
+LUBB runs on two computers:
+
+- **PC1, the AI PC** (`node2`, the NVIDIA DGX Spark) runs only the AI: Whisper turns speech into text
+  and qwen2.5:14b writes the minutes. Both run as background services that start when the PC boots,
+  even before anyone logs in, so there is nothing to start by hand. PC1 keeps no audio or text.
+- **PC2, the meeting PC** runs the app: the hub, the web app and the USB mics on the Unitek hub. It
+  sends each spoken turn to PC1 and gets the text back, and at the end sends the transcript for the
+  minutes. Meetings and recordings are stored on PC2.
+
+```
+PC2 (meeting PC)                                  PC1 (AI PC, node2)
+USB mics → hub :8000 ──── audio, transcript ────►  LUBB AI server :8001 ─► Whisper on the GPU
+           web app :3000 ◄──── text, minutes ─────                      └► Ollama (qwen2.5:14b)
+```
+
+PC1 is set up already ([Running the AI → Option A](#option-a-an-ai-pc-one-gpu-machine-serves-the-hub-over-the-internet)).
+These steps connect PC2 to it.
+
+#### Step 1: check that PC1 is serving (on PC1)
+
+```bash
+systemctl --user status lubb-ai ollama   # both: active (running)
+grep AI_TOKEN ~/lubb/ai/.env             # the token PC2 needs; keep it private
+ip -4 addr                               # PC1's addresses on the network
+```
+
+If a service isn't running: `systemctl --user restart lubb-ai` (or `ollama`), then look at
+`journalctl --user -u lubb-ai -n 50`.
+
+#### Step 2: choose how PC2 reaches PC1
+
+**A. Both PCs on the same network (same building)** — recommended. Nothing goes over the internet,
+it's the fastest, and it needs no accounts.
+
+1. Find PC1's address in Step 1 (the wired one, e.g. `10.16.23.36`) and PC2's with `ip -4 addr` on PC2.
+   These can change when the PCs restart. Ask IT to reserve fixed addresses for both.
+2. PC1's firewall is on. Let PC2 in, and only PC2 (on PC1):
+   ```bash
+   sudo ufw allow from <PC2-address> to any port 8001 proto tcp
+   ```
+3. PC1's address for the next steps: `http://<PC1-address>:8001`.
+
+**B. PCs on different networks (e.g. PC2 at another site)** — use [Tailscale](https://tailscale.com),
+a private, encrypted, direct link between your PCs that gives PC1 a fixed name.
+
+> Our organisation's network blocks Tailscale (`tailscale.com` doesn't resolve). Ask IT to allow it,
+> or use case A. Don't try to get around the block.
+
+1. On **both** PCs (log in with the **same** account on both; a Google login works):
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up            # opens a login link
+   ```
+2. On PC1, let Tailscale traffic reach the AI server (and nothing else from outside):
+   ```bash
+   sudo ufw allow in on tailscale0 to any port 8001 proto tcp
+   ```
+3. PC1's address for the next steps: `http://node2:8001`. If the name doesn't work, use the
+   `100.x.y.z` address that `tailscale ip -4` prints on PC1.
+
+Tailscale's free plan is for personal, non-commercial use. Installations for paying clients need a
+paid plan, or [Headscale](https://github.com/juanfont/headscale) (a free server you run yourself), or
+case A on the client's own network.
+
+#### Step 3: test the link (on PC2)
+
+```bash
+curl -H "Authorization: Bearer <AI_TOKEN>" http://<PC1>:8001/health
+```
+
+It should answer `{"status":"ok","gpu":"NVIDIA GB10",…,"llm_models":["qwen2.5:14b"]}`. If not:
+
+| You see | Meaning |
+|---|---|
+| `401` / `Bad or missing AI_TOKEN` | The token is wrong; copy it again from PC1's `ai/.env` |
+| Hangs, then `Connection timed out` | PC1's firewall (Step 2), or the two networks can't reach each other |
+| `Connection refused` | The AI server isn't running on PC1 (Step 1) |
+| `Could not resolve host` | Use PC1's address instead of its name |
+
+#### Step 4: set up the app on PC2
+
+1. Install and set up LUBB on PC2 with [Getting started on Ubuntu](#getting-started-on-ubuntu), steps 1–4.
+2. Point its hub at PC1. Make its settings file from the template:
+   ```bash
+   cd ~/lubb/backend && cp .env.example .env
+   ```
+   then, in `.env`, set these lines:
+   ```
+   STT_ENGINE=remote
+   STT_URL=http://<PC1>:8001
+   LLM_ENGINE=ollama
+   OLLAMA_URL=http://<PC1>:8001
+   LLM_MODEL=qwen2.5:14b
+   AI_TOKEN=<AI_TOKEN from PC1>
+   ```
+   Leave `LOCAL_MICS` as it is. The Unitek hub's socket order is built in (`MIC_SOCKETS`), so the mic in
+   socket 1 is btn-1, socket 2 is btn-2, and so on.
+
+#### Step 5: start it and hold a test meeting (on PC2)
+
+1. Plug the Unitek hub with the mics into PC2.
+2. Start the hub and the web app, each in its own terminal:
+   ```bash
+   cd ~/lubb/backend && venv/bin/uvicorn app.main:app --env-file .env --port 8000
+   cd ~/lubb/frontend && npm run dev
+   ```
+3. Check that the hub uses PC1: `curl localhost:8000/api/health` shows `"stt":"remote","llm":"ollama"`.
+   The hub's terminal lists the mics: `Mics → buttons:  btn-1 ← mic in socket 1 …`.
+4. Open **http://localhost:3000** → **New meeting**, put each person on the button of their mic's
+   socket, and start. Each turn appears on screen about a second after the speaker stops.
+5. End the meeting: the minutes appear in the summary page within a few seconds.
+
+#### Every day
+
+- **PC1:** keep it switched on and connected. The AI starts by itself when it boots.
+- **PC2:** start the hub and the web app (Step 5, point 2).
+- **New token:** if you ever change `AI_TOKEN` in PC1's `ai/.env`, restart the AI server
+  (`systemctl --user restart lubb-ai`) and put the new token in PC2's `backend/.env`.
 
 ---
 
@@ -106,6 +256,9 @@ sudo apt install -y git curl
 # Presentations: the hub converts slides locally
 sudo apt install -y libreoffice-impress poppler-utils
 
+# USB mics: the hub records them with arecord
+sudo apt install -y alsa-utils
+
 # Python — Ubuntu 24.04 ships 3.12:
 sudo apt install -y python3 python3-venv python3-pip
 python3 --version                     # must be 3.11 or newer
@@ -132,10 +285,10 @@ cd lubb
 
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-python -m pytest                      # should print: 24 passed
+python -m pytest                      # should print: 38 passed
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -223,6 +376,7 @@ the firmware.
 | `GET /meetings/{id}/floor` | Who has the floor and who is waiting |
 | `POST /meetings/{id}/floor/grant` · `revoke` · `dismiss` | Chairman mode: give the floor to `{device_id}` · take it back · drop a request |
 | `GET /meetings/{id}/export/docx` | Minutes as a Word document |
+| `GET /meetings/{id}/audio` | The meeting's recording: every turn in speaking order, one WAV file (404 if none) |
 | `GET /presentations` · `POST /presentations?name=…` | List · upload (raw file body) |
 | `GET /presentations/{id}` · `DELETE /presentations/{id}` | One deck (status, slide count) · delete |
 | `GET /presentations/{id}/slides/{n}.png` | Slide image |
@@ -255,7 +409,7 @@ using the Pydantic models in `backend/app/models.py`:
 
 - `Meeting`: title, agenda, agenda_index, language, floor_mode, status (`scheduled` / `live` / `ended`), participants, utterances, report, report_pending, now_showing, slides_shown, timestamps
 - `Participant`: name, title, device_id, color, is_chair, photo (small JPEG data URL)
-- `Utterance`: participant_id, start/end time, text, language, agenda_index, slide
+- `Utterance`: participant_id, start/end time, text, language, agenda_index, slide, audio (its recording is kept)
 - `Report`: summary, decisions, tasks (text, owner_id, due_date, done), language, approved
 
 Storing a document per meeting means changing the model needs no database migration: add new
@@ -264,6 +418,10 @@ fields with a default value. Delete `lubb.db` to start fresh.
 Presentations live next to the database, one folder each: `backend/data/presentations/<id>/`
 (`meta.json`, the original file, `slides/1.png…`).
 
+Recordings too, one folder per meeting: `backend/data/recordings/<meeting id>/<utterance id>.wav`
+(16 kHz mono, about 2 MB per minute of talk), plus `meeting.wav`, the turns joined, made when someone
+listens. These are recordings of what people said: set `RECORD_AUDIO=false` where they mustn't be kept.
+
 ---
 
 ## Running the AI
@@ -271,7 +429,28 @@ Presentations live next to the database, one folder each: `backend/data/presenta
 By default both engines are **stubs**: transcripts show `[N s audio — transcription stub]` and the
 minutes say `Stub report`. That's enough to work on the UI. For real AI, pick one option below.
 
-### Option A: Google Colab (no GPU needed)
+### Option A: an AI PC (one GPU machine serves the hub, over the internet)
+
+[ai/server.py](ai/server.py) runs Whisper and the minutes LLM on a GPU machine (tested on an NVIDIA
+DGX Spark: 9 s of Arabic speech in 0.4 s). The hub can run on any other computer and reaches it with
+`STT_ENGINE=remote`, like Colab, but the address and token never change.
+
+On the AI PC (once):
+```bash
+# Ollama (https://ollama.com) with the model, listening on 127.0.0.1:11434 only
+ollama pull qwen2.5:14b
+cd ai && python3 -m venv venv
+venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cu130
+venv/bin/pip install -r requirements.txt
+printf 'AI_TOKEN=%s\n' "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" > .env
+systemctl --user enable --now "$PWD/lubb-ai.service"   # port 8001, starts at boot
+```
+(For it to start at boot before anyone logs in: `sudo loginctl enable-linger $USER`.)
+
+To connect the meeting PC to it, follow [Connecting the two PCs](#connecting-the-two-pcs). A hub on
+the AI PC itself uses `http://127.0.0.1:8001`. Logs: `journalctl --user -u lubb-ai -f`.
+
+### Option B: Google Colab (no GPU needed)
 
 1. Open [colab/lubb_ai_colab.ipynb](colab/lubb_ai_colab.ipynb) in Google Colab (**File → Upload notebook**).
 2. Choose **Runtime → Change runtime type → T4 GPU**, then **Runtime → Run all**. The first run takes 5–10 minutes.
@@ -291,7 +470,7 @@ and demos, not confidential meetings. **Never commit `backend/.env`**; it is git
 and `POST /api/chat` forwarded to Ollama. The notebook contains a copy of it. If you change
 `server.py`, update the `%%writefile server.py` cell in the notebook too.
 
-### Option B: a local NVIDIA GPU (e.g. an Ubuntu laptop with CUDA)
+### Option C: a local NVIDIA GPU on the hub itself (e.g. an Ubuntu laptop with CUDA)
 
 ```bash
 # Speech-to-text (needs CUDA 12 + cuDNN 9; the pip packages below provide the libraries)
@@ -316,17 +495,19 @@ All backend settings are environment variables (`backend/app/config.py`). Put th
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `STT_ENGINE` | `stub` | `stub`, `whisper` (local) or `remote` (Colab) |
+| `STT_ENGINE` | `stub` | `stub`, `whisper` (local) or `remote` (the AI PC or Colab) |
 | `WHISPER_MODEL` | `large-v3-turbo` | faster-whisper model for `whisper` |
 | `STT_URL` | — | Remote STT server, for `remote` |
 | `LLM_ENGINE` | `stub` | `stub` or `ollama` |
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama, local or the Colab URL |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama, local, or the AI PC / Colab URL |
 | `LLM_MODEL` | `qwen2.5:14b` | Model used for the minutes |
+| `LLM_CONTEXT` | `32768` | Tokens the model reads at once (~2 h of talk); a longer transcript would be cut off |
 | `AI_TOKEN` | — | Sent as `Authorization: Bearer …` to remote AI servers |
 | `DB_PATH` | `data/lubb.db` | SQLite file, relative to where the hub starts |
 | `DEFAULT_LANGUAGE` | `ar` | Default meeting language |
 | `MICS_ENABLED` | `true` | Master switch for all buttons; `false` keeps them muted and drops audio |
 | `ORG_NAME` | — | Letterhead printed at the top of exported (Word) minutes |
+| `RECORD_AUDIO` | `true` | Keep the audio of every turn, to listen to meetings again from the archive |
 
 Frontend: `HUB_URL` (default `http://localhost:8000`) is where Next.js forwards `/api` and `/ws`.
 `next.config.mjs` raises `experimental.proxyClientMaxBodySize` to 250 MB: by default Next.js cuts
@@ -352,8 +533,12 @@ backend/                     Python / FastAPI hub
   app/services/stt.py        Speech-to-text: stub / faster-whisper / remote
   app/services/llm.py        Minutes: stub / Ollama (streamed), tolerant JSON parsing; agenda + slide markers
   app/services/export.py     Minutes → Word (.docx), right-to-left for Arabic
+  app/services/recordings.py Each turn's audio as WAV; joins them into the meeting's recording
   tests/                     pytest (conftest.py points the DB at a temp file)
   .env.example               Template for remote-AI settings
+ai/
+  server.py                  The AI PC's server: Whisper on the GPU (PyTorch) + Ollama, behind AI_TOKEN
+  lubb-ai.service            systemd user service that keeps it running (port 8001)
 colab/
   lubb_ai_colab.ipynb        Notebook: Ollama + Whisper + Cloudflare tunnel on a Colab GPU
   server.py                  The GPU server the notebook runs

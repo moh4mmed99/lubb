@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Download, FileQuestion, FileText, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { AudioLines, Check, Download, FileQuestion, FileText, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -470,28 +470,45 @@ function SpeakingTime({ meeting }) {
 
 function FullTranscript({ meeting }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [listening, setListening] = useState(false);
   const byId = Object.fromEntries(meeting.participants.map((p) => [p.id, p]));
+  const recorded = meeting.utterances.filter((u) => u.audio).length;
   return (
-    <details className="group mt-10 border-t border-line pt-6">
-      <summary className="cursor-pointer list-none text-sm font-semibold">
-        {t("report.transcript")} <span className="text-muted">({meeting.utterances.length})</span>
-      </summary>
-      <div className="mt-4 space-y-3 text-sm">
-        {meeting.utterances.map((u) => (
-          <p key={u.id} dir="auto" className="leading-relaxed">
-            <span className="font-mono text-xs text-muted" dir="ltr">
-              {elapsed(meeting.started_at, u.started_at)}
-            </span>{" "}
-            <span className="font-medium">{byId[u.participant_id]?.name}:</span> {u.text}
-            {u.slide && (
-              <span className="ms-2 whitespace-nowrap rounded-md bg-subtle px-1.5 py-0.5 text-[11px] text-muted">
-                {t("report.onSlide", { n: u.slide.slide })}
-              </span>
-            )}
-          </p>
-        ))}
+    <section className="mt-10 border-t border-line pt-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="cursor-pointer text-sm font-semibold">
+          {t("report.transcript")} <span className="text-muted">({meeting.utterances.length})</span>
+        </button>
+        {recorded > 0 && (
+          <Button onClick={() => setListening(!listening)} aria-pressed={listening} className={`no-print px-3 py-1.5 text-xs ${listening ? "bg-fg text-bg" : ""}`}>
+            <AudioLines size={15} />
+            {t("report.recording")}
+          </Button>
+        )}
       </div>
-    </details>
+      {listening && (
+        // ?n= changes with every new turn: a live meeting's recording keeps growing
+        <audio controls autoPlay src={`/api/meetings/${meeting.id}/audio?n=${recorded}`} className="no-print mt-4 w-full" />
+      )}
+      {open && (
+        <div className="mt-4 space-y-3 text-sm">
+          {meeting.utterances.map((u) => (
+            <p key={u.id} dir="auto" className="leading-relaxed">
+              <span className="font-mono text-xs text-muted" dir="ltr">
+                {elapsed(meeting.started_at, u.started_at)}
+              </span>{" "}
+              <span className="font-medium">{byId[u.participant_id]?.name}:</span> {u.text}
+              {u.slide && (
+                <span className="ms-2 whitespace-nowrap rounded-md bg-subtle px-1.5 py-0.5 text-[11px] text-muted">
+                  {t("report.onSlide", { n: u.slide.slide })}
+                </span>
+              )}
+            </p>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

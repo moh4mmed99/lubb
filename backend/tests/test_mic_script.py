@@ -51,6 +51,44 @@ def test_port_order_is_numeric():
     assert sorted(ports, key=mb._natural) == ["3-1.2", "3-1.4.1", "3-1.10", "3-2"]
 
 
+def test_mics_whose_noise_gate_sends_pure_silence_still_hear_normal_voices():
+    # two UGREEN mics: between voices their noise gate sends exact zeros
+    a, b = mb.VoiceGate(), mb.VoiceGate()
+    for _ in range(mb.CALIBRATE):
+        a.step(-120, [])
+        b.step(-120, [])
+    assert a.room == b.room == mb.FLOOR and a.threshold == -50
+    events = []
+    for _ in range(20):  # someone talks into B; A, further away, hears them quieter
+        events.append(a.step(-45, [b.lift]))
+        b.step(-25, [a.lift])
+    assert "press" not in events and b.held  # the voice stays with the mic it was spoken into
+
+
+def test_a_room_measured_while_someone_talked_is_put_right_by_the_next_quiet():
+    gate = mb.VoiceGate()
+    for _ in range(mb.CALIBRATE):  # the mic connected mid-sentence (e.g. the hub restarted)
+        gate.step(-27, [])
+    assert gate.threshold == -15  # only a shout would count
+    for _ in range(50):  # one second of quiet
+        gate.step(-120, [])
+    assert round(gate.room) == mb.FLOOR and round(gate.threshold) == -50
+    assert "press" in [gate.step(-30, []) for _ in range(10)]
+
+
+def test_a_voice_two_mics_hear_almost_alike_is_kept_once():
+    a, b = mb.VoiceGate(), mb.VoiceGate()
+    for _ in range(mb.CALIBRATE):
+        a.step(-120, [])
+        b.step(-120, [])
+    a.lift = b.lift = 37.0  # both have been hearing the speaker for a while: neither is 6 dB clearly closer
+    events = []
+    for _ in range(40):
+        events += [f"A {e}"] if (e := a.step(-31, [b.lift])) else []
+        events += [f"B {e}"] if (e := b.step(-33, [a.lift])) else []
+    assert events == ["A press"] and a.contested  # not dropped, not recorded twice; the louder mic takes it
+
+
 def test_a_voice_belongs_to_the_mic_that_hears_it_loudest():
     a, b = mb.VoiceGate(), mb.VoiceGate()
 

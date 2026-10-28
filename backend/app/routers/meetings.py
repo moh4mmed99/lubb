@@ -3,12 +3,13 @@ from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 
 from .. import state
 from ..floor_control import FloorController
 from ..models import AgendaMove, FloorMode, FloorMove, Language, ManualMinutes, Meeting, MeetingCreate, MeetingStatus, Report
 from ..realtime import manager
-from ..services import export, llm
+from ..services import export, llm, recordings
 from ..store import store
 from .devices import apply_floor, finish_turn
 
@@ -65,6 +66,7 @@ def delete_history() -> dict:
     gone = [m.id for m in list(store.meetings.values()) if m.status != MeetingStatus.live]
     for meeting_id in gone:
         store.delete(meeting_id)
+        recordings.delete(meeting_id)
     return {"deleted": len(gone)}
 
 
@@ -78,6 +80,17 @@ def delete_meeting(meeting_id: str) -> None:
     if _get(meeting_id).status == MeetingStatus.live:
         raise HTTPException(409, "End the meeting before deleting it")
     store.delete(meeting_id)
+    recordings.delete(meeting_id)
+
+
+@router.get("/{meeting_id}/audio")
+def get_recording(meeting_id: str) -> FileResponse:
+    """The meeting's recording: every turn in speaking order, as one WAV file."""
+    meeting = _get(meeting_id)
+    path = recordings.meeting_audio(meeting)
+    if not path:
+        raise HTTPException(404, "This meeting has no recording")
+    return FileResponse(path, media_type="audio/wav", filename=f"{meeting.title}.wav", content_disposition_type="inline")
 
 
 @router.post("/{meeting_id}/start")

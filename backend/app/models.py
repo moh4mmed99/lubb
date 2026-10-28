@@ -58,6 +58,7 @@ class Utterance(BaseModel):
     language: Language | None = None
     agenda_index: int | None = None  # agenda item being discussed when this was said
     slide: SlideRef | None = None  # slide on screen when this was said, if presenting
+    audio: bool = False  # its recording is kept (RECORD_AUDIO)
 
 
 class Decision(BaseModel):

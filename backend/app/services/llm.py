@@ -64,7 +64,13 @@ async def _chat(messages: list[dict]) -> str:
     """Streams the answer so a slow model never leaves the connection idle (tunnels time out at ~100 s)."""
     import httpx
 
-    payload = {"model": settings.llm_model, "format": "json", "stream": True, "messages": messages}
+    payload = {
+        "model": settings.llm_model,
+        "format": "json",
+        "stream": True,
+        "messages": messages,
+        "options": {"num_ctx": settings.llm_context},
+    }
     parts: list[str] = []
     timeout = httpx.Timeout(30, read=300)
     async with httpx.AsyncClient(timeout=timeout) as client:

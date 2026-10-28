@@ -2,7 +2,7 @@
 
 STT_ENGINE=stub     -> placeholder text (no GPU needed, for UI development)
 STT_ENGINE=whisper  -> faster-whisper (pip install faster-whisper)
-STT_ENGINE=remote   -> POST the PCM to STT_URL/transcribe (see colab/)
+STT_ENGINE=remote   -> POST the PCM to STT_URL/transcribe (the AI PC in ai/, or colab/)
 
 Whatever engine runs, its text goes through clean() before it's kept.
 """

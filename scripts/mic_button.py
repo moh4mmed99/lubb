@@ -49,10 +49,15 @@ from websockets.exceptions import WebSocketException
 FRAME = 640  # 20 ms of 16 kHz mono 16-bit audio
 CALIBRATE = 50  # frames of room noise measured at start (1 s)
 START_AFTER = 3  # loud frames in a row that count as speech (60 ms)
+CLOSE_AFTER = 15  # a voice no mic clearly claims for 300 ms goes to the mic that hears it loudest
 STOP_AFTER = 50  # quiet frames in a row that end the turn (1 s)
 PRE_ROLL = 15  # frames kept from just before speech starts (300 ms), so the first word isn't cut
 MARGIN = 6.0  # dB: with several mics, a voice belongs to a mic only if it's this much louder there than anywhere else
+# dB: anything quieter counts as this. UGREEN mics have a noise gate that sends pure silence between voices; taken
+# as the room's noise, that would make every sound look loud to the mic, and it would take every voice from the others.
+FLOOR = -70.0
 REPLACED = 4001  # the hub closes a button's connection with this when another connection takes the same button
+DEBUG = os.environ.get("MIC_DEBUG", "").lower() in ("1", "true", "yes", "on")
 
 LEDS = {
     "ready": "🔵 ready",
@@ -83,23 +88,34 @@ class VoiceGate:
         self.lift = 0.0  # how far above the room this mic hears right now (dB, smoothed)
         self.held = False
         self.loud = self.quiet = 0
+        self.close = 0  # frames in a row this mic heard a voice loudest, but not clearly
+        self.contested = False  # the current turn was a close call between mics
 
     def step(self, db: float, others: list[float]) -> str | None:
         """Returns "press", "release", or None."""
+        db = max(db, FLOOR)
         if self.threshold is None:  # still measuring the room
             self.noise.append(db)
             if len(self.noise) == CALIBRATE:
                 self.room = statistics.median(self.noise)
                 self.threshold = max(self.room + 12, -50)  # clearly above the room, never so low that hiss counts
             return None
+        if not self.held:
+            # keep up with the room: fall at once when it's quieter (a first measurement taken while someone was
+            # talking is put right within a second of quiet), rise only very slowly (a voice never becomes "room")
+            self.room += (0.1 if db < self.room else 0.0002) * (db - self.room)
+            self.threshold = max(self.room + 12, -50)
         self.lift = 0.6 * self.lift + 0.4 * (db - self.room)
         loudest_other = max(others, default=-120.0)
         voiced = db > self.threshold
         if not self.held:
-            # start only for a voice that's clearly this mic's
+            # start for a voice that's clearly this mic's, or, when no mic is clearly closer (two mics near one
+            # speaker), for one this mic hears loudest: a voice is never dropped for being heard by two mics
             self.loud = self.loud + 1 if voiced and self.lift >= loudest_other + MARGIN else 0
-            if self.loud >= START_AFTER:
-                self.held, self.loud, self.quiet = True, 0, 0
+            self.close = self.close + 1 if voiced and self.lift > loudest_other else 0
+            if self.loud >= START_AFTER or self.close >= CLOSE_AFTER:
+                self.contested = self.loud < START_AFTER
+                self.held, self.loud, self.close, self.quiet = True, 0, 0, 0
                 return "press"
         else:
             # keep going while the voice isn't clearly someone else's
@@ -222,6 +238,7 @@ class Seat:
         self.led = None
         self.ws = None
         self.replaced = False  # another connection took this button over
+        self.sent = False  # audio of the current turn reached the hub
 
     def say(self, text: str) -> None:
         print(f"[{self.button}] {text}", flush=True)
@@ -230,7 +247,14 @@ class Seat:
 async def press(seat: Seat, down: bool) -> None:
     seat.gate.held = down
     await seat.ws.send(json.dumps({"type": "button_down" if down else "button_up"}))
-    seat.say("🎙  speaking…" if down else "… turn ended, the hub is transcribing")
+    if down:
+        seat.sent = False
+        close = " (another mic hears this voice almost as loud: keep each mic close to its own speaker)"
+        seat.say("🎙  speaking…" + (close if seat.gate.contested else ""))
+    elif seat.sent:
+        seat.say("… turn ended, the hub is transcribing")
+    else:
+        seat.say("… turn ended, not recorded (no live meeting with this button, or someone else had the floor)")
 
 
 async def run_seat(seat: Seat, peers: dict, hub: str, manual: bool = False) -> None:
@@ -261,10 +285,17 @@ async def run_seat(seat: Seat, peers: dict, hub: str, manual: bool = False) -> N
 
             async def audio() -> None:
                 pending: deque[bytes] = deque(maxlen=PRE_ROLL)  # recent audio not yet sent
+                peak, frames = FLOOR, 0  # MIC_DEBUG=1: what this mic hears, every half second it hears anything
                 while True:
                     chunk = await loop.run_in_executor(None, mic.stdout.read, FRAME)
                     if not chunk:
                         raise RuntimeError("the mic stopped (unplugged?)")
+                    if DEBUG:
+                        peak, frames = max(peak, level_db(chunk)), frames + 1
+                        if frames == 25:
+                            if peak > FLOOR and seat.gate.threshold is not None:
+                                print(f"  level {seat.button}: {peak:.0f} dB (voices above {seat.gate.threshold:.0f})", flush=True)
+                            peak, frames = FLOOR, 0
                     if not manual:
                         calibrating = seat.gate.threshold is None
                         others = [s.gate.lift for s in list(peers.values()) if s is not seat and s.gate.room is not None]
@@ -280,6 +311,7 @@ async def run_seat(seat: Seat, peers: dict, hub: str, manual: bool = False) -> N
                     # Until then keep the last moment, so speech from just before the grant isn't lost.
                     pending.append(chunk)
                     if seat.gate.held and seat.led == "talking":
+                        seat.sent = True
                         while pending:
                             await ws.send(pending.popleft())
 
