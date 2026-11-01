@@ -24,13 +24,6 @@ export function formatDate(iso, lng, opts = { dateStyle: "medium" }) {
   return new Intl.DateTimeFormat(`${lng}-u-nu-latn`, opts).format(new Date(iso));
 }
 
-/** Seconds each participant held the floor, by participant id. */
-export function speakingTime(meeting) {
-  const out = {};
-  for (const u of meeting.utterances) out[u.participant_id] = (out[u.participant_id] ?? 0) + seconds(u.started_at, u.ended_at);
-  return out;
-}
-
 /** Inserts an utterance in speaking order, ignoring duplicates. */
 export function addUtterance(utterances, u) {
   if (utterances.some((x) => x.id === u.id)) return utterances;

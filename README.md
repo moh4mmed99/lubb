@@ -43,12 +43,29 @@ Contents: [What's new in v1.4](#whats-new-in-v14) · [v1.3](#whats-new-in-v13) �
 - **Made for the UGREEN mics:** their noise gate sends pure silence between voices, which no longer throws off the room measurement. Each mic keeps measuring the room, so a measurement taken while someone was talking is put right within a second of quiet.
 - **Clearer log:** a turn spoken with no live meeting says *not recorded* instead of *the hub is transcribing*. `MIC_DEBUG=1` prints what each mic hears, twice a second.
 
+**Following up previous tasks**
+- **Pick them in *New meeting*:** a *Follow up previous tasks (متابعة مهام سابقة)* card lists the open tasks from earlier meetings' minutes, newest meeting first, with owner and due date (overdue in red). Tick tasks one by one, or a meeting's name for all its tasks. *Follow-up on previous tasks* becomes the first agenda item.
+- **Review them live:** the live page's side panel has a *Follow-up (المتابعة)* tab with how many are still open. Ticking a task there marks it done in its own meeting's minutes too, so *Task follow-up* stays right.
+- **In the minutes:** a *Follow-up on previous tasks* section lists each one as done, in progress or overdue, with a link to the meeting it came from (in the PDF and the Word export too). It records where each task stood when the meeting ended. The AI is told which tasks were followed up, so it doesn't list them again as new tasks.
+- **API:** `POST /meetings` takes `followups: [{meeting_id, task_id}]`. New: `PUT /meetings/{id}/followups/{task_id}` with `{done}`, and a `followup` event.
+
 **Archive**
+- **Clearer minutes:** a meeting's minutes sit on a white card with black text, in dark mode too, instead of grey text on frosted glass. The PDF and Word export are black as well. The *Speaking time* bars are gone, and so is the talk time beside each agenda item.
 - **Meeting recordings:** the audio of every transcribed turn is kept. On a meeting's minutes page, *Recording (التسجيل الصوتي)* beside *Full transcript* plays the whole meeting, turn after turn (download from the player's menu). Deleting a meeting deletes its recording. `RECORD_AUDIO=false` turns recording off. New API: `GET /meetings/{id}/audio`.
+
+**Room screen**
+- **What people say stays off the wall:** the room screen shows who is speaking, the agenda item and who is next, but no longer the words being said. The transcript is only on the live dashboard and in the minutes.
+
+**Phone and PC**
+- **Every page fits a phone, a tablet, a laptop and a large screen**, checked at 390, 820, 1024 and 1440 px wide.
+- **Forms follow their own box:** the participant rows on *New meeting* and *Manual minutes* lay themselves out by the width of their card (CSS container queries), not the window's. On a 1024 px laptop the two cards now stack instead of squeezing the name boxes and the date and time boxes. The KPI tiles do the same: one row of five on a wide screen, the headline above three on a mid-size one, two across on a phone.
+- **Live meeting on a phone:** the recording time and the buttons wrap under the title, so *End meeting* is never cut off. The floating "speaking now" card shows only on wide screens; on phones and tablets it covered the transcript and the agenda buttons, and the speaker is already shown in green at the top.
+- **Room screen on a phone or tall screen:** the photo and name scale down so the name always fits, with the turn timer under it.
+- **Small fixes:** the phone's bottom menu scrolls to the open page's tab; button labels never break over two lines; archive rows keep the time and duration on one line; delete buttons that appear on mouse hover stay visible on touch screens.
 
 **Docs:** *Getting started* now installs `alsa-utils` for the mics and uses the hub's real venv folder (`venv`).
 
-**Tests:** 38 backend tests (adds USB mic numbering by port and socket, voice detection across mics and noise gates, meeting recordings, Whisper clean-up and manual minutes).
+**Tests:** 40 backend tests (adds USB mic numbering by port and socket, voice detection across mics and noise gates, meeting recordings, Whisper clean-up, manual minutes and following up previous tasks).
 
 ### Connecting the two PCs
 
@@ -288,7 +305,7 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python -m pytest                      # should print: 38 passed
+python -m pytest                      # should print: 40 passed
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -370,6 +387,7 @@ the firmware.
 | `POST /meetings/{id}/start` · `POST /meetings/{id}/end` | Start (409 if another is live) · end and write the minutes in the background |
 | `POST /meetings/{id}/report/generate` | Write the minutes again |
 | `PUT /meetings/{id}/report` | Save edited / approved minutes |
+| `PUT /meetings/{id}/followups/{task_id}` | Tick a followed-up task `{done}` in the meeting; the task in the earlier meeting's minutes changes too (409 once the meeting has ended) |
 | `GET /devices` | Connected buttons with LED state and battery |
 | `DELETE /meetings` | Delete history (every meeting except the live one) |
 | `POST /meetings/{id}/agenda` | Move the live meeting to agenda item `{index}` |
@@ -395,6 +413,7 @@ Interactive docs: http://localhost:8000/docs.
   - `meeting_started` / `meeting_ended`
   - `report_ready`
   - `agenda` (current item changed)
+  - `followup` (a followed-up task was ticked)
   - `floor` (chairman mode: speaker and queue)
   - `slide` (slide on the room screen, or none)
   - `presentation_ready` (a deck finished converting, or failed)
@@ -566,7 +585,7 @@ frontend/                    Next.js 16 (App Router) + React 19 + Tailwind 4, pl
   lib/api.js                 REST client + error messages
   lib/useHub.js              Live events WebSocket hook (auto-reconnect)
   lib/useLiveMeeting.js      The live meeting + button states, shared by the dashboard and room screen
-  lib/format.js              Dates, durations, speaking time, colours, button list
+  lib/format.js              Dates, durations, colours, button list
   lib/kpis.js                KPI calculations
   lib/image.js               Participant photo helper
   lib/theme.js               Light/dark toggle

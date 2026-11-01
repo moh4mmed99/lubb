@@ -37,6 +37,8 @@ LABELS = {
         "status": "الحالة",
         "done": "منجزة",
         "open": "مفتوحة",
+        "followups": "متابعة المهام السابقة",
+        "from": "من اجتماع",
         "transcript": "النص الكامل",
         "slide": "الشريحة",
         "draft": "مسودة — لم يُعتمد بعد",
@@ -63,6 +65,8 @@ LABELS = {
         "status": "Status",
         "done": "Done",
         "open": "Open",
+        "followups": "Follow-up on previous tasks",
+        "from": "From meeting",
         "transcript": "Full transcript",
         "slide": "slide",
         "draft": "Draft — not approved yet",
@@ -151,17 +155,16 @@ def minutes_docx(meeting: Meeting) -> bytes:
     lang = meeting.language.value if meeting.language.value in LABELS else "ar"
     L = LABELS[lang]
     w = _Writer(rtl=lang == "ar")
-    muted = RGBColor(0x6A, 0x6A, 0x66)
     names = {p.id: p.name for p in meeting.participants}
     report = meeting.report
 
     # Letterhead
     if settings.org_name:
-        w.para(settings.org_name, size=12, bold=True, color=muted, space_after=0)
-    w.para(L["minutes"], size=10, color=muted, space_after=2)
+        w.para(settings.org_name, size=12, bold=True, space_after=0)
+    w.para(L["minutes"], size=10, space_after=2)
     w.para(meeting.title, size=20, bold=True, space_after=2)
     if report:
-        w.para(L["approved"] if report.approved else L["draft"], size=9, color=muted, space_after=10)
+        w.para(L["approved"] if report.approved else L["draft"], size=9, space_after=10)
 
     # Details
     minutes = (
@@ -184,6 +187,16 @@ def minutes_docx(meeting: Meeting) -> bytes:
         said = {u.agenda_index for u in meeting.utterances}
         for i, item in enumerate(meeting.agenda):
             w.para(f"{i + 1}. {item} — {L['covered'] if i in said else L['skipped']}")
+
+    if meeting.followups:
+        w.heading(L["followups"])
+        w.table(
+            [L["task"], L["owner"], L["from"], L["due"], L["status"]],
+            [
+                [f.text, f.owner or "—", f.meeting_title, f.due_date or "—", L["done"] if f.done else L["open"]]
+                for f in meeting.followups
+            ],
+        )
 
     w.heading(L["summary"])
     for line in (report.summary if report else []) or [L["none"]]:
@@ -217,7 +230,7 @@ def minutes_docx(meeting: Meeting) -> bytes:
     footer = w.doc.sections[0].footer.paragraphs[0]
     if w.rtl:
         _rtl_paragraph(footer)
-    _style_run(footer.add_run("LUBB AI"), w.rtl, 8, color=muted)
+    _style_run(footer.add_run("LUBB AI"), w.rtl, 8)
 
     out = BytesIO()
     w.doc.save(out)

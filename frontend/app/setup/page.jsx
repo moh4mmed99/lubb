@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FollowUpPicker, followUpKey, previousTasks } from "@/components/FollowUps";
 import { Avatar, Button, Card, CardHeader, Field, Notice, PageHeader, Segmented, inputClass } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { BUTTONS, SPEAKER_COLORS } from "@/lib/format";
@@ -34,6 +35,8 @@ export default function SetupPage() {
   const [participants, setParticipants] = useState(() => [newParticipant(new Set(), 0)]);
   const [online, setOnline] = useState(new Set());
   const [live, setLive] = useState(null);
+  const [meetings, setMeetings] = useState([]); // earlier meetings, for their open tasks
+  const [picked, setPicked] = useState(new Set()); // tasks to follow up (followUpKey)
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -42,6 +45,7 @@ export default function SetupPage() {
       const [devs, all] = await Promise.all([api("/devices"), api("/meetings")]);
       setOnline(new Set(devs.map((d) => d.device_id)));
       setLive(all.find((m) => m.status === "live") ?? null);
+      setMeetings(all);
     } catch (err) {
       setError(errorText(err, t));
     }
@@ -78,12 +82,19 @@ export default function SetupPage() {
   const start = async () => {
     setSaving(true);
     setError(null);
+    // the picked tasks still open (one may have been ticked elsewhere since); reviewing them opens the agenda
+    const followups = previousTasks(meetings).flatMap(({ meeting: m, tasks }) =>
+      tasks.filter((x) => picked.has(followUpKey(m.id, x.id))).map((x) => ({ meeting_id: m.id, task_id: x.id })),
+    );
+    const items = agendaDraft.trim() ? [...agenda, agendaDraft.trim()] : agenda;
+    const followItem = t("followup.agendaItem", { lng: language });
     try {
       const meeting = await api("/meetings", {
         method: "POST",
         body: {
           title: title.trim(),
-          agenda: agendaDraft.trim() ? [...agenda, agendaDraft.trim()] : agenda,
+          agenda: followups.length && !items.includes(followItem) ? [followItem, ...items] : items,
+          followups,
           language,
           floor_mode: floorMode,
           participants: named.map(({ key: _key, ...p }) => ({ ...p, name: p.name.trim(), title: p.title.trim() || null })),
@@ -124,7 +135,9 @@ export default function SetupPage() {
       )}
       {error && <Notice tone="danger">{error}</Notice>}
 
-      <div className="fill grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      {/* Wide screens: details above the follow-up card, participants beside both. Stacked (phone, tablet): details,
+          participants, then the follow-up card, which is optional */}
+      <div className="fill grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:grid-rows-[auto_1fr]">
         {/* Details */}
         <Card>
           <CardHeader icon={SlidersHorizontal} title={t("setup.details")} />
@@ -168,7 +181,7 @@ export default function SetupPage() {
                       <button
                         onClick={() => setAgenda((a) => a.filter((_, j) => j !== i))}
                         aria-label={t("common.remove")}
-                        className="text-muted transition hover:text-fg sm:opacity-0 sm:group-hover:opacity-100"
+                        className="text-muted transition hover:text-fg pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
                       >
                         <X size={15} />
                       </button>
@@ -192,8 +205,8 @@ export default function SetupPage() {
           </div>
         </Card>
 
-        {/* Participants */}
-        <Card>
+        {/* Participants: each row is laid out by the card's width (@lg), not the window's */}
+        <Card className="@container xl:col-start-2 xl:row-span-2 xl:row-start-1">
           <CardHeader
             icon={Users}
             title={t("setup.participants")}
@@ -203,7 +216,7 @@ export default function SetupPage() {
               </span>
             }
           />
-          <div className="hidden grid-cols-[2.25rem_1fr_1fr_7.5rem_2rem_1.5rem] gap-3 px-5 pt-4 text-xs text-muted sm:grid">
+          <div className="hidden grid-cols-[2.25rem_1fr_1fr_7.5rem_2rem_1.5rem] gap-3 px-5 pt-4 text-xs text-muted @lg:grid">
             <span />
             <span>{t("setup.name")}</span>
             <span>{t("setup.role")}</span>
@@ -211,18 +224,18 @@ export default function SetupPage() {
             <span />
             <span />
           </div>
-          <ul className="divide-y divide-line px-5 sm:divide-y-0">
+          <ul className="divide-y divide-line px-5 @lg:divide-y-0">
             {participants.map((p) => (
-              <li key={p.key} className="grid grid-cols-[2.25rem_1fr_1.5rem] items-center gap-3 py-3 sm:grid-cols-[2.25rem_1fr_1fr_7.5rem_2rem_1.5rem] sm:py-2">
+              <li key={p.key} className="grid grid-cols-[2.25rem_1fr_1.5rem] items-center gap-3 py-3 @lg:grid-cols-[2.25rem_1fr_1fr_7.5rem_2rem_1.5rem] @lg:py-2">
                 <PhotoPicker participant={p} onChange={(photo) => update(p.key, { photo })} />
                 <input className={inputClass} value={p.name} placeholder={t("setup.name")} onChange={(e) => update(p.key, { name: e.target.value })} />
                 <input
-                  className={`${inputClass} col-start-2 sm:col-start-auto`}
+                  className={`${inputClass} col-start-2 @lg:col-start-auto`}
                   value={p.title}
                   placeholder={t("setup.role")}
                   onChange={(e) => update(p.key, { title: e.target.value })}
                 />
-                <div className="relative col-start-2 sm:col-start-auto">
+                <div className="relative col-start-2 @lg:col-start-auto">
                   <select
                     className={`${inputClass} pe-6`}
                     value={p.device_id ?? ""}
@@ -248,7 +261,7 @@ export default function SetupPage() {
                 <button
                   onClick={() => setChair(p.key)}
                   title={t("common.chair")}
-                  className={`col-start-3 row-start-1 grid place-items-center sm:col-start-auto sm:row-start-auto ${p.is_chair ? "text-amber-500" : "text-line hover:text-muted"}`}
+                  className={`col-start-3 row-start-1 grid place-items-center @lg:col-start-auto @lg:row-start-auto ${p.is_chair ? "text-amber-500" : "text-line hover:text-muted"}`}
                 >
                   <Star size={17} fill={p.is_chair ? "currentColor" : "none"} />
                 </button>
@@ -256,7 +269,7 @@ export default function SetupPage() {
                   onClick={() => setParticipants((ps) => ps.filter((o) => o.key !== p.key))}
                   aria-label={t("common.remove")}
                   disabled={participants.length === 1}
-                  className="col-start-3 row-start-2 grid place-items-center text-muted hover:text-danger disabled:opacity-30 sm:col-start-auto sm:row-start-auto"
+                  className="col-start-3 row-start-2 grid place-items-center text-muted hover:text-danger disabled:opacity-30 @lg:col-start-auto @lg:row-start-auto"
                 >
                   <X size={16} />
                 </button>
@@ -271,6 +284,14 @@ export default function SetupPage() {
             <p className="text-xs text-muted">{t("setup.onlineHint", { count: online.size })}</p>
           </div>
         </Card>
+
+        <FollowUpPicker
+          meetings={meetings}
+          picked={picked}
+          onChange={setPicked}
+          language={language}
+          className="xl:col-start-1 xl:row-start-2"
+        />
       </div>
     </div>
   );

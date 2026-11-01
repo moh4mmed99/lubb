@@ -121,7 +121,7 @@ export default function ArchivePage() {
                 <AnimatePresence>
                 {results.map((m) => (
                   <StaggerItem as="li" key={m.id} className="group flex items-center transition-colors hover:bg-subtle">
-                    <Link href={m.status === "live" ? "/" : `/meetings/${m.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-4 ps-5">
+                    <Link href={m.status === "live" ? "/" : `/meetings/${m.id}`} className="flex min-w-0 flex-1 items-center gap-3 py-4 ps-5 sm:gap-4">
                       <div className="w-12 shrink-0 text-center">
                         {m.started_at ? (
                           <>
@@ -136,7 +136,7 @@ export default function ArchivePage() {
                         <div className="truncate font-medium">
                           <bdi>{m.title}</bdi>
                         </div>
-                        <div className="mt-1 flex items-center gap-3 text-xs text-muted">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted *:whitespace-nowrap">
                           {m.started_at && <span>{formatDate(m.started_at, lng, { timeStyle: "short" })}</span>}
                           {m.started_at && m.ended_at && <span>{duration(m.started_at, m.ended_at, lng)}</span>}
                           <span className="inline-flex items-center gap-1">
@@ -146,7 +146,7 @@ export default function ArchivePage() {
                       </div>
                       <StatusBadge meeting={m} />
                       {/* nudges toward the meeting on hover, in reading direction */}
-                      <Chevron size={16} className="text-muted transition-transform duration-200 group-hover:translate-x-1 rtl:group-hover:-translate-x-1" />
+                      <Chevron size={16} className="hidden shrink-0 text-muted transition-transform sm:block duration-200 group-hover:translate-x-1 rtl:group-hover:-translate-x-1" />
                     </Link>
                     {/* the live meeting must be ended before it can be deleted */}
                     <button
@@ -154,7 +154,7 @@ export default function ArchivePage() {
                       disabled={busy || m.status === "live"}
                       aria-label={t("history.delete")}
                       title={t("history.delete")}
-                      className="mx-3 grid size-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-card hover:text-danger disabled:invisible sm:opacity-0 sm:group-hover:opacity-100"
+                      className="mx-3 grid size-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-card hover:text-danger disabled:invisible pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
                     >
                       <Trash2 size={16} />
                     </button>

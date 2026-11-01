@@ -74,16 +74,16 @@ export default function ManualMinutesPage() {
       />
       {error && <Notice tone="danger">{error}</Notice>}
 
-      <div className="fill grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <div className="fill grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* When and what */}
-        <Card>
+        <Card className="@container">
           <CardHeader icon={CalendarDays} title={t("setup.details")} />
           <div className="space-y-5 p-5">
             <Field label={t("setup.meetingTitle")}>
               <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("setup.meetingTitlePh")} />
             </Field>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label={t("manual.date")}>
+            <div className="grid grid-cols-2 gap-3 @sm:grid-cols-3">
+              <Field label={t("manual.date")} className="col-span-2 @sm:col-span-1">
                 <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
               </Field>
               <Field label={t("manual.from")}>
@@ -119,7 +119,7 @@ export default function ManualMinutesPage() {
                       <button
                         onClick={() => setAgenda((a) => a.filter((_, j) => j !== i))}
                         aria-label={t("common.remove")}
-                        className="text-muted transition hover:text-fg sm:opacity-0 sm:group-hover:opacity-100"
+                        className="text-muted transition hover:text-fg pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
                       >
                         <X size={15} />
                       </button>
@@ -143,21 +143,21 @@ export default function ManualMinutesPage() {
           </div>
         </Card>
 
-        {/* Who attended: names only, no buttons (nothing was recorded) */}
-        <Card>
+        {/* Who attended: names only, no buttons (nothing was recorded). Rows follow the card's width (@sm). */}
+        <Card className="@container">
           <CardHeader icon={Users} title={t("manual.attendees")} />
-          <div className="hidden grid-cols-[1fr_1fr_2rem_1.5rem] gap-3 px-5 pt-4 text-xs text-muted sm:grid">
+          <div className="hidden grid-cols-[1fr_1fr_2rem_1.5rem] gap-3 px-5 pt-4 text-xs text-muted @sm:grid">
             <span>{t("setup.name")}</span>
             <span>{t("setup.role")}</span>
             <span />
             <span />
           </div>
-          <ul className="divide-y divide-line px-5 sm:divide-y-0">
+          <ul className="divide-y divide-line px-5 @sm:divide-y-0">
             {people.map((p) => (
-              <li key={p.key} className="grid grid-cols-[1fr_2rem_1.5rem] items-center gap-3 py-3 sm:grid-cols-[1fr_1fr_2rem_1.5rem] sm:py-2">
+              <li key={p.key} className="grid grid-cols-[1fr_2rem_1.5rem] items-center gap-3 py-3 @sm:grid-cols-[1fr_1fr_2rem_1.5rem] @sm:py-2">
                 <input className={inputClass} value={p.name} placeholder={t("setup.name")} onChange={(e) => update(p.key, { name: e.target.value })} />
                 <input
-                  className={`${inputClass} col-start-1 sm:col-start-auto`}
+                  className={`${inputClass} col-start-1 @sm:col-start-auto`}
                   value={p.title}
                   placeholder={t("setup.role")}
                   onChange={(e) => update(p.key, { title: e.target.value })}
@@ -166,7 +166,7 @@ export default function ManualMinutesPage() {
                   onClick={() => setChair(p.key)}
                   title={t("common.chair")}
                   aria-label={t("common.chair")}
-                  className={`col-start-2 row-start-1 grid place-items-center sm:col-start-auto sm:row-start-auto ${p.is_chair ? "text-amber-500" : "text-line hover:text-muted"}`}
+                  className={`col-start-2 row-start-1 grid place-items-center @sm:col-start-auto @sm:row-start-auto ${p.is_chair ? "text-amber-500" : "text-line hover:text-muted"}`}
                 >
                   <Star size={17} fill={p.is_chair ? "currentColor" : "none"} />
                 </button>
@@ -174,7 +174,7 @@ export default function ManualMinutesPage() {
                   onClick={() => setPeople((ps) => ps.filter((x) => x.key !== p.key))}
                   disabled={people.length === 1}
                   aria-label={t("common.remove")}
-                  className="col-start-3 row-start-1 grid place-items-center text-muted transition hover:text-danger disabled:invisible sm:col-start-auto sm:row-start-auto"
+                  className="col-start-3 row-start-1 grid place-items-center text-muted transition hover:text-danger disabled:invisible @sm:col-start-auto @sm:row-start-auto"
                 >
                   <X size={16} />
                 </button>

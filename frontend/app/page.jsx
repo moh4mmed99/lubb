@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChairPanel } from "@/components/ChairPanel";
+import { FollowUpList } from "@/components/FollowUps";
 import { MeetingStats } from "@/components/MeetingStats";
 import { SpeakerSpotlight } from "@/components/SpeakerSpotlight";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, Segmented, VoiceBars } from "@/components/ui";
@@ -106,8 +107,8 @@ export default function LiveMeetingPage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-2 text-sm text-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="inline-flex items-center gap-2 whitespace-nowrap text-sm text-muted">
             <span className="size-2 animate-pulse rounded-full bg-danger" />
             {t("live.recording")}
           </span>
@@ -241,6 +242,10 @@ function SidePanel({ meeting, onMoveAgenda }) {
             onChange={setTab}
             options={[
               { value: "agenda", label: t("live.agenda") },
+              // earlier tasks to review, when the meeting has any; the number still open
+              ...(meeting.followups?.length
+                ? [{ value: "followup", label: `${t("followup.tab")} ${meeting.followups.filter((f) => !f.done).length}` }]
+                : []),
               { value: "stats", label: t("live.stats") },
             ]}
           />
@@ -248,6 +253,8 @@ function SidePanel({ meeting, onMoveAgenda }) {
         <div className="flex-1 overflow-y-auto p-5 text-sm leading-relaxed">
           {tab === "agenda" ? (
             <AgendaList agenda={meeting.agenda} current={meeting.agenda_index} onSelect={onMoveAgenda} />
+          ) : tab === "followup" ? (
+            <FollowUpList meeting={meeting} />
           ) : (
             <MeetingStats meeting={meeting} />
           )}

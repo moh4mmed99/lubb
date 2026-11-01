@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Avatar, Badge, Button, Card, EmptyState, Loading, Notice, inputClass } from "@/components/ui";
 import { api, cached, errorText } from "@/lib/api";
-import { duration, elapsed, formatDate, mmss, speakingTime } from "@/lib/format";
+import { duration, elapsed, formatDate } from "@/lib/format";
 import { useHub } from "@/lib/useHub";
 
 const newId = () => Math.random().toString(36).slice(2, 14);
@@ -195,7 +195,8 @@ export default function MinutesPage() {
 
       {/* Document in the wide column, details in a narrow rail beside it (on wide screens) */}
       <div className="fill grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
-      <Card className="self-stretch p-6 md:p-10">
+      {/* paper: a white sheet with black text, in either theme, so the minutes read clearly */}
+      <Card className="paper self-stretch p-6 md:p-10">
         {/* Title block */}
         <p className="text-xs font-medium uppercase tracking-wider text-muted">{t("report.label")}</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">
@@ -218,6 +219,7 @@ export default function MinutesPage() {
         </dl>
 
         <AgendaCoverage meeting={meeting} />
+        <FollowUps meeting={meeting} />
 
         {meeting.report_pending ? (
           <div className="flex items-center gap-3 py-12 text-sm text-muted">
@@ -286,7 +288,6 @@ export default function MinutesPage() {
           <p className="mt-10 border-t border-line pt-6 text-xs text-muted">{t("manual.noRecording")}</p>
         ) : (
           <>
-            <SpeakingTime meeting={meeting} />
             <FullTranscript meeting={meeting} />
           </>
         )}
@@ -412,27 +413,34 @@ function AddButton({ onClick, label }) {
   );
 }
 
-/** Each agenda item: discussed or not, with how many contributions and how much talk time it got. */
-function AgendaCoverage({ meeting }) {
+/** Tasks from earlier meetings reviewed in this one, and where each stood (as at the end of the meeting). */
+function FollowUps({ meeting }) {
   const { t } = useTranslation();
-  if (!meeting.agenda.length) return null;
+  if (!meeting.followups?.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
   return (
-    <Section title={t("report.agenda")}>
+    <Section title={t("followup.section")}>
       <ol className="divide-y divide-line border-y border-line">
-        {meeting.agenda.map((item, i) => {
-          const said = meeting.utterances.filter((u) => u.agenda_index === i);
-          const secs = said.reduce((sum, u) => sum + (Date.parse(u.ended_at) - Date.parse(u.started_at)) / 1000, 0);
+        {meeting.followups.map((f) => {
+          const late = !f.done && f.due_date && f.due_date < today;
           return (
-            <li key={i} className="flex items-center gap-3 py-3">
-              <span className="font-mono text-xs text-muted">{String(i + 1).padStart(2, "0")}</span>
-              <bdi className="flex-1">{item}</bdi>
-              {said.length > 0 && (
-                <span className="hidden text-xs text-muted sm:inline">
-                  {t("report.contributions", { count: said.length })} · <span dir="ltr">{mmss(Math.round(secs))}</span>
-                </span>
-              )}
-              {/* manual minutes have no recording to tell what was discussed */}
-              {!meeting.manual && <Badge tone={said.length ? "ok" : "muted"}>{said.length ? t("report.covered") : t("report.skipped")}</Badge>}
+            <li key={f.task_id} className="flex items-start gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p dir="auto">{f.text}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {f.owner ?? t("followup.noOwner")} · {t("followup.from")}{" "}
+                  <Link href={`/meetings/${f.meeting_id}`} className="hover:underline">
+                    <bdi>{f.meeting_title}</bdi>
+                  </Link>
+                  {f.due_date && (
+                    <>
+                      {" · "}
+                      <span dir="ltr">{f.due_date}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+              <Badge tone={f.done ? "ok" : late ? "danger" : "muted"}>{t(f.done ? "followup.done" : late ? "followup.overdue" : "followup.open")}</Badge>
             </li>
           );
         })}
@@ -441,29 +449,30 @@ function AgendaCoverage({ meeting }) {
   );
 }
 
-function SpeakingTime({ meeting }) {
+/** Each agenda item: discussed or not, and how many contributions it got. */
+function AgendaCoverage({ meeting }) {
   const { t } = useTranslation();
-  const talk = speakingTime(meeting);
-  const maxTalk = Math.max(...Object.values(talk), 1);
+  if (!meeting.agenda.length) return null;
   return (
-    <Section title={t("report.speakingTime")}>
-      <ul className="space-y-3">
-        {meeting.participants.map((p) => (
-          <li key={p.id} className="flex items-center gap-3">
-            <Avatar name={p.name} color={p.color} photo={p.photo} size="sm" />
-            <div className="w-28 shrink-0">
-              <div className="text-sm">{p.name}</div>
-              <div className="text-xs text-muted">{p.title}</div>
-            </div>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
-              <div className="h-full rounded-full" style={{ width: `${((talk[p.id] ?? 0) / maxTalk) * 100}%`, backgroundColor: p.color }} />
-            </div>
-            <span className="w-12 text-end font-mono text-xs text-muted" dir="ltr">
-              {mmss(talk[p.id] ?? 0)}
-            </span>
-          </li>
-        ))}
-      </ul>
+    <Section title={t("report.agenda")}>
+      <ol className="divide-y divide-line border-y border-line">
+        {meeting.agenda.map((item, i) => {
+          const said = meeting.utterances.filter((u) => u.agenda_index === i);
+          return (
+            <li key={i} className="flex items-center gap-3 py-3">
+              <span className="font-mono text-xs text-muted">{String(i + 1).padStart(2, "0")}</span>
+              <bdi className="flex-1">{item}</bdi>
+              {said.length > 0 && (
+                <span className="hidden text-xs text-muted sm:inline">
+                  {t("report.contributions", { count: said.length })}
+                </span>
+              )}
+              {/* manual minutes have no recording to tell what was discussed */}
+              {!meeting.manual && <Badge tone={said.length ? "ok" : "muted"}>{said.length ? t("report.covered") : t("report.skipped")}</Badge>}
+            </li>
+          );
+        })}
+      </ol>
     </Section>
   );
 }
@@ -526,7 +535,7 @@ function DetailsRail({ meeting, lng }) {
         <Meta label={t("report.duration")} value={meeting.started_at && meeting.ended_at ? duration(meeting.started_at, meeting.ended_at, lng) : "—"} />
       </dl>
       <div>
-        <p className="mb-3 text-xs text-muted">
+        <p className="mb-3 text-xs">
           {t("report.attendees")} · {meeting.participants.length}
         </p>
         <ul className="space-y-2.5">
@@ -534,7 +543,7 @@ function DetailsRail({ meeting, lng }) {
             <li key={p.id} className="flex items-center gap-2.5">
               <Avatar name={p.name} color={p.color} photo={p.photo} size="sm" />
               <span className="min-w-0 flex-1 truncate">{p.name}</span>
-              {p.is_chair && <span className="text-xs text-muted">{t("common.chair")}</span>}
+              {p.is_chair && <span className="text-xs">{t("common.chair")}</span>}
             </li>
           ))}
         </ul>
@@ -551,14 +560,14 @@ function SlidesShown({ meeting }) {
   for (const s of meeting.slides_shown) (decks[s.presentation_id] ??= { title: s.title, slides: new Set() }).slides.add(s.slide);
   return (
     <div>
-      <p className="mb-3 text-xs text-muted">{t("report.presented")}</p>
+      <p className="mb-3 text-xs">{t("report.presented")}</p>
       <ul className="space-y-2">
         {Object.entries(decks).map(([id, d]) => (
           <li key={id}>
             <Link href={`/presentations/${id}`} className="hover:underline">
               <bdi>{d.title}</bdi>
             </Link>
-            <span className="text-xs text-muted"> · {t("report.slidesShown", { count: d.slides.size })}</span>
+            <span className="text-xs"> · {t("report.slidesShown", { count: d.slides.size })}</span>
           </li>
         ))}
       </ul>
@@ -569,7 +578,7 @@ function SlidesShown({ meeting }) {
 function Meta({ label, value }) {
   return (
     <div>
-      <dt className="text-xs text-muted">{label}</dt>
+      <dt className="text-xs">{label}</dt>
       <dd className="mt-1 font-medium">{value}</dd>
     </div>
   );

@@ -11,8 +11,8 @@ import { elapsed, formatDate, mmss } from "@/lib/format";
 import { useLiveMeeting } from "@/lib/useLiveMeeting";
 
 // Room screen: full-screen view for the meeting-room monitor. A flat green field with the wordmark,
-// and one black box holding everything people need to read: who is speaking, the agenda item,
-// who is next, and the latest line of the transcript. Every seat's button state runs along the bottom.
+// and one black box holding everything people need to read: who is speaking, the agenda item and
+// who is next. What people say is never shown here. Every seat's button state runs along the bottom.
 
 const STATE_DOT = {
   talking: "bg-signal",
@@ -54,7 +54,7 @@ export default function StagePage() {
   // No meeting: the wordmark, the time, and a note that the room is waiting
   if (!meeting) {
     return (
-      <div className="flex h-full flex-col bg-signal p-6 text-black md:p-10">
+      <div className="flex h-full flex-col bg-signal p-4 text-black sm:p-6 md:p-10">
         <div className="flex items-start justify-between">
           {brand(t("brand.tagline"))}
           {controls}
@@ -81,15 +81,13 @@ export default function StagePage() {
     );
   }
 
-  const byId = Object.fromEntries(meeting.participants.map((p) => [p.id, p]));
   const talking = meeting.participants.filter((p) => stateOf(p) === "talking");
   const waiting = meeting.participants.filter((p) => stateOf(p) === "waiting");
-  const last = meeting.utterances.at(-1);
   const agendaItem = meeting.agenda_index < meeting.agenda.length ? meeting.agenda[meeting.agenda_index] : null;
 
   return (
     <div className="flex h-full flex-col bg-signal text-black">
-      <header className="flex items-start justify-between gap-6 p-6 md:px-10 md:pt-8">
+      <header className="flex items-start justify-between gap-4 p-4 sm:gap-6 sm:p-6 md:px-10 md:pt-8">
         {brand(<bdi>{meeting.title}</bdi>)}
         <div className="flex items-start gap-4">
           <div className="text-end">
@@ -103,7 +101,7 @@ export default function StagePage() {
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 items-center justify-center px-6 md:px-10">
+      <main className="flex min-h-0 flex-1 items-center justify-center px-4 sm:px-6 md:px-10">
         <Box className="w-full max-w-5xl">
           {/* Who has the floor */}
           {talking.length > 0 ? (
@@ -116,19 +114,24 @@ export default function StagePage() {
                   transition={{ type: "spring", stiffness: 380, damping: 26 }}
                   className="shrink-0"
                 >
-                  <SpeakerPhoto person={p} className="size-28 text-5xl ring-4 ring-signal md:size-36 md:text-6xl" />
+                  <SpeakerPhoto person={p} className="size-16 text-3xl ring-4 ring-signal sm:size-28 sm:text-5xl md:size-36 md:text-6xl" />
                 </motion.div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-6xl font-semibold tracking-tight md:text-7xl">
+                  <div className="truncate text-3xl font-semibold tracking-tight sm:text-5xl lg:text-7xl">
                     <bdi>{p.name}</bdi>
                   </div>
                   {p.title && (
-                    <div className="mt-2 truncate text-2xl text-white/60">
+                    <div className="mt-1 truncate text-lg text-white/60 sm:mt-2 sm:text-2xl">
                       <bdi>{p.title}</bdi>
                     </div>
                   )}
+                  {turns[p.id] && (
+                    <div className="mt-2 sm:hidden">
+                      <TurnTimer since={turns[p.id]} label={t("stage.turn")} />
+                    </div>
+                  )}
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-3">
+                <div className="hidden shrink-0 flex-col items-end gap-3 sm:flex">
                   <Waveform />
                   {turns[p.id] && <TurnTimer since={turns[p.id]} label={t("stage.turn")} />}
                 </div>
@@ -137,18 +140,18 @@ export default function StagePage() {
           ) : (
             <Row big>
               <div>
-                <div className="text-6xl font-semibold tracking-tight md:text-7xl">{t("stage.floorOpen")}</div>
-                <div className="mt-2 text-2xl text-white/60">{t("stage.hint")}</div>
+                <div className="text-4xl font-semibold tracking-tight sm:text-6xl md:text-7xl">{t("stage.floorOpen")}</div>
+                <div className="mt-2 text-lg text-white/60 sm:text-2xl">{t("stage.hint")}</div>
               </div>
             </Row>
           )}
 
           {agendaItem && (
             <Row>
-              <span className="label w-32 shrink-0 text-[13px] text-white/60">
+              <span className="label w-20 shrink-0 text-[13px] text-white/60 sm:w-32">
                 {t("live.item", { n: meeting.agenda_index + 1, total: meeting.agenda.length })}
               </span>
-              <span className="min-w-0 flex-1 truncate text-2xl">
+              <span className="min-w-0 flex-1 truncate text-lg sm:text-2xl">
                 <bdi>{agendaItem}</bdi>
               </span>
             </Row>
@@ -156,8 +159,8 @@ export default function StagePage() {
 
           {waiting.length > 0 && (
             <Row>
-              <span className="label w-32 shrink-0 text-[13px] text-white/60">{t("stage.next")}</span>
-              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 text-2xl">
+              <span className="label w-20 shrink-0 text-[13px] text-white/60 sm:w-32">{t("stage.next")}</span>
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 text-lg sm:text-2xl">
                 {waiting.map((p, i) => (
                   <span key={p.id} className="inline-flex items-center gap-3">
                     {i > 0 && <Arrow size={18} className="text-white/40" />}
@@ -167,22 +170,11 @@ export default function StagePage() {
               </span>
             </Row>
           )}
-
-          {last && (
-            <Row>
-              <span className="label w-32 shrink-0 truncate pt-1.5 text-[13px] text-white/60">
-                <bdi>{byId[last.participant_id]?.name ?? "?"}</bdi>
-              </span>
-              <p key={last.id} dir="auto" className="line-clamp-2 min-w-0 flex-1 text-2xl leading-snug">
-                {last.text}
-              </p>
-            </Row>
-          )}
         </Box>
       </main>
 
       {/* Every seat and its button state */}
-      <footer className="m-6 flex flex-wrap gap-x-6 gap-y-2 bg-black px-6 py-4 text-white md:mx-10 md:mb-8">
+      <footer className="m-4 flex flex-wrap gap-x-6 gap-y-2 bg-black px-6 py-4 text-white sm:m-6 md:mx-10 md:mb-8">
         {meeting.participants.map((p) => {
           const state = stateOf(p);
           return (
@@ -204,7 +196,11 @@ function Box({ className = "", children }) {
 
 function Row({ big = false, children }) {
   return (
-    <div className={`flex justify-between gap-6 border-b border-white/20 last:border-b-0 ${big ? "items-center py-8" : "items-start py-4"}`}>{children}</div>
+    <div
+      className={`flex flex-wrap justify-between gap-x-4 gap-y-2 border-b border-white/20 last:border-b-0 sm:flex-nowrap sm:gap-6 ${big ? "items-center py-6 sm:py-8" : "items-start py-4"}`}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -262,7 +258,7 @@ function TurnTimer({ since, label }) {
 function Elapsed({ since }) {
   const now = useNow();
   return (
-    <span className="font-mono text-4xl font-semibold tabular-nums" dir="ltr">
+    <span className="font-mono text-2xl font-semibold tabular-nums sm:text-4xl" dir="ltr">
       {now ? elapsed(since, now.toISOString()) : "00:00:00"}
     </span>
   );
@@ -274,7 +270,7 @@ function WallClock() {
   if (!now) return <span className="font-mono text-5xl">--:--</span>;
   return (
     <>
-      <span className="font-mono text-5xl font-semibold tabular-nums" dir="ltr">
+      <span className="whitespace-nowrap font-mono text-4xl font-semibold tabular-nums sm:text-5xl" dir="ltr">
         {formatDate(now.toISOString(), i18n.language, { hour: "2-digit", minute: "2-digit" })}
       </span>
       <span className="label pt-3 text-[13px] text-white/60">{formatDate(now.toISOString(), i18n.language, { dateStyle: "full" })}</span>

@@ -53,7 +53,7 @@ export function Button({ variant = "ghost", className = "", ...props }) {
     <motion.button
       whileTap={props.disabled ? undefined : { scale: 0.96 }}
       transition={spring}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40 ${variants[variant]} ${className}`}
       {...props}
     />
   );
@@ -128,9 +128,9 @@ export function Segmented({ value, options, onChange }) {
 export const inputClass =
   "w-full rounded-lg border border-line bg-card/50 px-3 py-2 text-sm outline-none transition placeholder:text-muted focus:border-fg";
 
-export function Field({ label, children }) {
+export function Field({ label, className = "", children }) {
   return (
-    <label className="block space-y-1.5">
+    <label className={`block space-y-1.5 ${className}`}>
       <span className="label text-muted">{label}</span>
       {children}
     </label>

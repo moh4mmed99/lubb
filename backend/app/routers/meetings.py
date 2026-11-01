@@ -7,7 +7,21 @@ from fastapi.responses import FileResponse
 
 from .. import state
 from ..floor_control import FloorController
-from ..models import AgendaMove, FloorMode, FloorMove, Language, ManualMinutes, Meeting, MeetingCreate, MeetingStatus, Report
+from ..models import (
+    AgendaMove,
+    FloorMode,
+    FloorMove,
+    FollowUp,
+    FollowUpRef,
+    FollowUpStatus,
+    Language,
+    ManualMinutes,
+    Meeting,
+    MeetingCreate,
+    MeetingStatus,
+    Report,
+    Task,
+)
 from ..realtime import manager
 from ..services import export, llm, recordings
 from ..store import store
@@ -24,9 +38,38 @@ def _get(meeting_id: str) -> Meeting:
     return meeting
 
 
+def _source_task(ref: FollowUpRef) -> tuple[Meeting, Task] | None:
+    """The earlier meeting and the task in its minutes that a follow-up points to, if both are still there."""
+    source = store.get(ref.meeting_id)
+    task = next((t for t in source.report.tasks if t.id == ref.task_id), None) if source and source.report else None
+    return (source, task) if task else None
+
+
+def _follow_up(source: Meeting, task: Task) -> FollowUp:
+    owner = next((p.name for p in source.participants if p.id == task.owner_id), None)
+    return FollowUp(
+        meeting_id=source.id,
+        task_id=task.id,
+        text=task.text,
+        owner=owner,
+        due_date=task.due_date,
+        meeting_title=source.title,
+        done=task.done,
+    )
+
+
+def _sync_followups(meeting: Meeting) -> Meeting:
+    """Until it ends, a meeting's follow-ups match the original tasks (they may be edited or ticked elsewhere).
+    A task whose meeting was deleted keeps the copy."""
+    if meeting.status != MeetingStatus.ended:
+        meeting.followups = [_follow_up(*found) if (found := _source_task(f)) else f for f in meeting.followups]
+    return meeting
+
+
 @router.get("")
 def list_meetings() -> list[Meeting]:
-    return sorted(store.meetings.values(), key=lambda m: m.started_at or datetime.min, reverse=True)
+    meetings = sorted(store.meetings.values(), key=lambda m: m.started_at or datetime.min, reverse=True)
+    return [_sync_followups(m) for m in meetings]
 
 
 @router.post("")
@@ -38,7 +81,13 @@ def create_meeting(body: MeetingCreate) -> Meeting:
     devices = [p.device_id for p in body.participants if p.device_id]
     if len(devices) != len(set(devices)):
         raise HTTPException(422, "Each button can belong to one participant only")
-    return store.add(Meeting(**body.model_dump()))
+    followups = []
+    for ref in {(r.meeting_id, r.task_id): r for r in body.followups}.values():  # each task once
+        found = _source_task(ref)
+        if not found:
+            raise HTTPException(422, "A task to follow up no longer exists")
+        followups.append(_follow_up(*found))
+    return store.add(Meeting(**body.model_dump(exclude={"followups"}), followups=followups))
 
 
 @router.post("/manual")
@@ -72,7 +121,7 @@ def delete_history() -> dict:
 
 @router.get("/{meeting_id}")
 def get_meeting(meeting_id: str) -> Meeting:
-    return _get(meeting_id)
+    return _sync_followups(_get(meeting_id))
 
 
 @router.delete("/{meeting_id}", status_code=204)
@@ -116,6 +165,7 @@ async def end_meeting(meeting_id: str, language: Language | None = None) -> Meet
     meeting = _get(meeting_id)
     if meeting.status != MeetingStatus.live:
         raise HTTPException(409, "This meeting is not live")
+    _sync_followups(meeting)  # as they stand now; the minutes keep them so
     meeting.status = MeetingStatus.ended
     meeting.ended_at = datetime.now()
     meeting.now_showing = None
@@ -185,6 +235,25 @@ async def move_agenda(meeting_id: str, body: AgendaMove) -> Meeting:
     store.save(meeting)
     await manager.broadcast({"type": "agenda", "meeting_id": meeting.id, "index": meeting.agenda_index})
     return meeting
+
+
+@router.put("/{meeting_id}/followups/{task_id}")
+async def set_followup(meeting_id: str, task_id: str, body: FollowUpStatus) -> FollowUp:
+    """Ticks a followed-up task done (or open again) in the meeting; the task in the earlier minutes changes too."""
+    meeting = _get(meeting_id)
+    followup = next((f for f in meeting.followups if f.task_id == task_id), None)
+    if not followup:
+        raise HTTPException(404, "This meeting doesn't follow up that task")
+    if meeting.status == MeetingStatus.ended:
+        raise HTTPException(409, "This meeting has ended; tick the task on the task follow-up page")
+    if found := _source_task(followup):
+        source, task = found
+        task.done = body.done
+        store.save(source)
+    followup.done = body.done
+    store.save(meeting)
+    await manager.broadcast({"type": "followup", "meeting_id": meeting.id, "task_id": task_id, "done": body.done})
+    return followup
 
 
 @router.post("/{meeting_id}/report/generate")

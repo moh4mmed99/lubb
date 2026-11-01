@@ -2,6 +2,7 @@
 
 // "Speaking now": whoever holds the floor pops up in the corner with their photo, a pulsing ring, their voice
 // and how long they've been talking. It leaves when they stop. Several at once (free mode) stack up.
+// Wide screens only: on a phone or tablet it would cover the page, which already shows the speaker in green.
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,7 +14,7 @@ const MAX_SHOWN = 3;
 
 export function SpeakerSpotlight({ speakers }) {
   return (
-    <div className="no-print pointer-events-none fixed bottom-20 end-4 z-30 flex flex-col items-end gap-3 md:bottom-8 md:end-8">
+    <div className="no-print pointer-events-none fixed bottom-8 end-8 z-30 hidden flex-col items-end gap-3 lg:flex">
       <AnimatePresence>
         {speakers.slice(0, MAX_SHOWN).map((p) => (
           <Spot key={p.id} person={p} />

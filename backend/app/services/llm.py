@@ -41,6 +41,17 @@ def _transcript(meeting: Meeting) -> str:
     return "\n".join(lines)
 
 
+def _followups(meeting: Meeting) -> str:
+    """Tasks from earlier meetings reviewed in this one: the minutes list them apart, so they aren't new tasks."""
+    if not meeting.followups:
+        return ""
+    lines = [f"- {f.text} ({f.owner or 'no owner'}): {'done' if f.done else 'still open'}" for f in meeting.followups]
+    return (
+        "Tasks from earlier meetings, followed up in this meeting (recorded separately: don't list them again as "
+        "new tasks unless they were given a new owner or due date):\n" + "\n".join(lines) + "\n\n"
+    )
+
+
 async def generate_report(meeting: Meeting, language: str) -> Report:
     if settings.llm_engine == "stub":
         return Report(
@@ -51,7 +62,10 @@ async def generate_report(meeting: Meeting, language: str) -> Report:
         content = await _chat(
             [
                 {"role": "system", "content": PROMPT[language] + "\n" + INSTRUCTIONS},
-                {"role": "user", "content": f"Agenda:\n{_agenda(meeting)}\n\nTranscript:\n{_transcript(meeting)}"},
+                {
+                    "role": "user",
+                    "content": f"Agenda:\n{_agenda(meeting)}\n\n{_followups(meeting)}Transcript:\n{_transcript(meeting)}",
+                },
             ]
         )
     except Exception as exc:  # the secretary can still write the minutes by hand

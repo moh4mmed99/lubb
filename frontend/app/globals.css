@@ -112,6 +112,20 @@ body {
     box-shadow: var(--glass-shadow);
     backdrop-filter: blur(16px) saturate(1.5);
   }
+
+  /* Paper: the meeting minutes. A white sheet with black text in both themes, so they read clearly (the
+     glass behind would soften them). The tokens are reset inside it, so everything on it stays black on white. */
+  .paper {
+    --bg: #ffffff;
+    --card: #ffffff;
+    --subtle: #f2f2f0;
+    --fg: #000000;
+    --muted: #000000;
+    --line: #c9c9c5;
+    color-scheme: light;
+    background: #ffffff;
+    color: #000000;
+  }
 }
 
 /* Everything is sized in rem, so scaling the root scales the whole interface with the screen:

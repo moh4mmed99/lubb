@@ -20,6 +20,7 @@ import {
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/lib/theme";
 import { RollingWordmark } from "./RollingWordmark";
@@ -47,6 +48,12 @@ export function AppShell({ children }) {
   const isActive = (href) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
   const toggleLang = () => i18n.changeLanguage(i18n.language === "ar" ? "en" : "ar");
   const Arrow = i18n.language === "ar" ? ArrowLeft : ArrowRight;
+
+  // The phone's bottom bar scrolls sideways (more sections than fit), so bring the open page's tab into view
+  const bottomNav = useRef(null);
+  useEffect(() => {
+    bottomNav.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [pathname]);
 
   // The room screen fills the whole monitor: no sidebar or bars
   if (pathname === "/stage") return <main className="h-full">{children}</main>;
@@ -127,11 +134,12 @@ export function AppShell({ children }) {
       </main>
 
       {/* Mobile bottom nav */}
-      <nav className="no-print fixed inset-x-0 bottom-0 flex overflow-x-auto bg-rail text-rail-fg md:hidden">
+      <nav ref={bottomNav} className="no-print fixed inset-x-0 bottom-0 flex overflow-x-auto bg-rail text-rail-fg md:hidden">
         {nav.map(({ href, key, icon: Icon }) => (
           <Link
             key={href}
             href={href}
+            aria-current={isActive(href) ? "page" : undefined}
             className={`relative flex-1 whitespace-nowrap border-e border-rail-fg/20 px-3 py-2 text-center text-[11px] ${isActive(href) ? "text-black" : "text-rail-fg/75"}`}
           >
             {isActive(href) && <motion.span layoutId="nav-active-mobile" transition={spring} className="absolute inset-0 bg-signal" />}

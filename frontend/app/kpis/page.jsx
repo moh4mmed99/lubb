@@ -68,14 +68,28 @@ export default function KpisPage() {
         </Card>
       ) : (
         <>
-          {/* 5-column grid: the headline KPI (meetings) takes two columns, the other three one each */}
-          <Stagger className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          {/* The headline KPI (meetings), then the other three. The grid follows its own width, not the window's:
+              one row of 5 columns when there's room (headline 2 wide); else the headline on a row of its own above
+              the three; on a phone 2 columns, the last tile full width when it would sit alone */}
+          <div className="@container">
+          <Stagger className="grid grid-cols-2 gap-4 @xl:grid-cols-3 @5xl:grid-cols-5">
             {kpis.tiles.map((k, i) => (
-              <StaggerItem card key={k.key} className={i === 0 ? "col-span-2" : ""}>
+              <StaggerItem
+                card
+                key={k.key}
+                className={
+                  i === 0
+                    ? "col-span-2 @xl:col-span-3 @5xl:col-span-2"
+                    : i === kpis.tiles.length - 1 && i % 2 === 1
+                      ? "col-span-2 @xl:col-span-1"
+                      : ""
+                }
+              >
                 <StatTile kpi={k} featured={i === 0} />
               </StaggerItem>
             ))}
           </Stagger>
+          </div>
           <div className="fill grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <MeetingsColumns data={kpis.perMonth} />
             <TaskStatus data={kpis.taskStatus} />
@@ -108,7 +122,7 @@ function StatTile({ kpi, featured = false }) {
       <div className={`mt-2 whitespace-nowrap font-semibold tracking-tight ${featured ? "text-5xl sm:text-6xl" : "text-2xl sm:text-3xl"}`}>
         <bdi>{formatValue(kpi.format, kpi.value, i18n.language, t)}</bdi>
       </div>
-      <div className="mt-3 flex items-end justify-between gap-3">
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
         {kpi.delta != null && kpi.delta !== 0 ? (
           <span className={`inline-flex items-center gap-1 text-xs ${good ? "text-ok" : "text-danger"}`}>
             <Icon size={14} className="rtl:-scale-x-100" />

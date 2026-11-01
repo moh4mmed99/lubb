@@ -74,6 +74,28 @@ class Task(BaseModel):
     done: bool = False
 
 
+class FollowUpRef(BaseModel):
+    """A task from an earlier meeting's minutes, picked to be followed up in a new meeting."""
+
+    meeting_id: str
+    task_id: str
+
+
+class FollowUp(FollowUpRef):
+    """That task as it stands in the meeting following it up: copied when the meeting is created, kept in step with
+    the original until the meeting ends, then kept as it stood (the minutes record where each task was)."""
+
+    text: str
+    owner: str | None = None  # their name, from the earlier meeting
+    due_date: str | None = None
+    meeting_title: str
+    done: bool = False
+
+
+class FollowUpStatus(BaseModel):
+    done: bool
+
+
 class Report(BaseModel):
     summary: list[str] = []
     decisions: list[Decision] = []
@@ -94,6 +116,7 @@ class Meeting(BaseModel):
     status: MeetingStatus = MeetingStatus.scheduled
     participants: list[Participant] = []
     utterances: list[Utterance] = []
+    followups: list[FollowUp] = []  # tasks from earlier meetings reviewed in this one
     report: Report | None = None
     report_pending: bool = False  # minutes are being generated
     manual: bool = False  # minutes typed in by hand for a meeting that wasn't recorded (no transcript)
@@ -126,3 +149,4 @@ class MeetingCreate(BaseModel):
     language: Language = Language.ar
     floor_mode: FloorMode = FloorMode.free
     participants: list[Participant] = []
+    followups: list[FollowUpRef] = []

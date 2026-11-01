@@ -375,7 +375,7 @@ function DeckCard({ deck, index, featured, className = "", onDelete }) {
           onClick={onDelete}
           aria-label={t("decks.delete")}
           title={t("decks.delete")}
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-subtle hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-subtle hover:text-danger pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
         >
           <Trash2 size={16} />
         </button>

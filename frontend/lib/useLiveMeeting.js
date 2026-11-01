@@ -48,6 +48,11 @@ export function useLiveMeeting() {
       case "battery":
         setDevices((d) => (d[e.device_id] ? { ...d, [e.device_id]: { ...d[e.device_id], battery: e.level } } : d));
         break;
+      case "followup":
+        setMeeting((m) =>
+          m && m.id === e.meeting_id ? { ...m, followups: m.followups.map((f) => (f.task_id === e.task_id ? { ...f, done: e.done } : f)) } : m,
+        );
+        break;
       case "agenda":
         setMeeting((m) => (m && m.id === e.meeting_id ? { ...m, agenda_index: e.index } : m));
         break;

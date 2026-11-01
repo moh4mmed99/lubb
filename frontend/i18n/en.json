@@ -122,7 +122,6 @@
     "task": "Task",
     "owner": "Owner",
     "due": "Due",
-    "speakingTime": "Speaking time",
     "transcript": "Full transcript",
     "recording": "Recording",
     "agenda": "Agenda",
@@ -234,6 +233,20 @@
     "noDue": "No deadline",
     "markDone": "Mark done",
     "markOpen": "Reopen"
+  },
+  "followup": {
+    "title": "Follow up previous tasks",
+    "hint": "Pick open tasks from earlier meetings to review in this one.",
+    "none": "No open tasks from earlier meetings.",
+    "agendaNote": "“{{item}}” is added as the first agenda item.",
+    "agendaItem": "Follow-up on previous tasks",
+    "tab": "Follow-up",
+    "section": "Follow-up on previous tasks",
+    "from": "From meeting",
+    "noOwner": "No owner",
+    "done": "Done",
+    "open": "Open",
+    "overdue": "Overdue"
   },
   "decks": {
     "title": "Presentations",
